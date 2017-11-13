@@ -1,108 +1,182 @@
 # remove contractions, bad words, and punctuation
 
-cleanLine <- function(line) {
+cleanSentence <- function(sentence) {
         library(dplyr)
-        library(hunspell)
         library(tokenizers)
         library(qdapDictionaries)
         
-        abbreviations = rbind(abbreviations, 
-                              data.frame(abv = "T.V.", rep = "Television"))
+        # converting sentence into tokens
+        print("tokenizing...")
+        if (length(sentence) == 0) {
+                warning("no words in sentence! Skipping sentence")
+                print(sentence)
+                sentence = list(NULL)
+        }
+        print(sentence)
+        tokens = sentence %>% 
+                tokenize_words() %>% 
+                unlist()
+        print(tokens)
+        if (length(tokens) == 0) {
+                warning("no tokens in sentence! Skipping sentence")
+                print(tokens)
+                tokens = list(NULL)
+        }
+        if (any(is.null(tokens)) | any(is.na(tokens)) | length(tokens) == 0) {
+                print(tokens)
+                warning("token vector is null or na!")
+        }
+        print("removing numbers and non-ASCII characters...")
+        tokens = tokens %>%
+                gsub("'", "~", .) %>%
+                iconv("latin1", "ASCII", sub = "") %>%
+                gsub("[0-9]", "", .) %>%
+                .[. != ""]
+        if (length(tokens) == 0) {
+                warning("no tokens in sentence after removing numbers!")
+                }
+        if (any(is.null(tokens)) | any(is.na(tokens))) {
+                warning("token vector is null or na!")
+        }
         
+        # Loading dictionaries for token cleaning
+        contracted = contractions[, 1] %>% tokenize_words() %>% 
+                unlist() %>% gsub("'", "~", .)
+        expanded = contractions[, 2] %>% tokenize_words() %>% unlist()
+        abbreviations = rbind(abbreviations,
+                              data.frame(abv = "T.V.",
+                                         rep = "Television"))
+        abbrev = abbreviations[, 1] %>% tokenize_words() %>% unlist()
+        abbExp = abbreviations[, 2] %>% tokenize_words() %>% unlist()
+        badwords = readRDS("badWordsDict.rds")
+        stopwords_regex = paste(stopwords('en'), collapse = '\\b|\\b')
+        stopwords_regex = paste0('\\b', stopwords_regex, '\\b')
         
-        expandAbbreviations <- function(text) {
-                
-                text = text %>% strsplit(., " ") %>% unlist()
-                words = character(length(text))
-                for (i in 1:length(words)) {
-                        if (text[i] %in% abbreviations[, "abv"]) {
-                                words[i] = abbreviations[
-                                                  abbreviations[, "abv"] 
-                                                  %in% text, "rep"]
+        # Define functions
+        expContract <- function(tokens) {
+                print("Expanding contractions...")
+                sapply(1:length(tokens), function(i) {
+                        condition = tokens[i] %in% contracted
+                        if (condition && 
+                            !is.na(condition) &&
+                            !length(condition) == 0) {
+                                item = (which(contracted %in% tokens[i]) - 1) * 2
+                                expanded[item:(item + 1)]
                         } else {
-                                words[i] = text[i]
+                                tokens[i]
                         }
+                }) %>% unlist()
+        }
+        
+        expAbbv <- function(tokens) {
+                print("Expanding abbreviations")
+                sapply(1:length(tokens), function(i) {
+                        condition = tokens[i] %in% abbrev
+                        if (condition && 
+                            !is.na(condition) && 
+                            !length(condition) == 0) {
+                                item = (which(abbrev %in% tokens[i]) - 1) * 2
+                                abbExp[item:(item + 1)]  
+                        } else {
+                                tokens[i]
+                        }
+                })
+        }
+        
+        cleanWords <- function(tokens) {
+                print("Cleaning bad words...")
+                tokens = sapply(1:length(tokens), function(i) {
+                        condition = tokens[i] %in% badwords
+                        if (condition && 
+                            !is.na(condition) && 
+                            !length(condition) == 0) {
+                                "obscenity" 
+                        } else {
+                                tokens[i]
+                        }
+                })
+                print("tokens after removing badwords:")
+                tokens = sapply(tokens, function(x) x[!is.na(x)]) %>% unlist()
+                tokens = Filter(function(x) !identical(character(0),x), tokens)
+                badTokens = grepl("obscenity", tokens)
+                tokens = tokens[!badTokens]
+                print(tokens)
+                tokens
+        }
+        
+        spellCheck <- function(tokens) {
+                print("Spell checking...")
+                tokens = gsub("~", "", tokens)
+                print("tokens read for spellchecking:")
+                print(tokens)
+                if (!identical(character(0), tokens) && length(tokens) > 0) {
+                        tokens = sapply(1:length(tokens), function(i) {
+                                # print(tokens[i])
+                                if (is.na(tokens[i])) {
+                                        tokens[i] = ""
+                                        }
+                                library(hunspell)
+                                condition = hunspell_check(tokens[i] %>% as.character())
+                                # str(condition)
+                                if (!condition && 
+                                    !is.na(condition) && 
+                                    !length(condition) == 0) {
+                                        corrected = hunspell_suggest(tokens[i] %>% 
+                                                                             as.character())[[1]]
+                                        if (length(corrected) > 1) {
+                                                corrected = corrected[2]
+                                        }
+                                        corrected = gsub(" ", "", corrected)[1]
+                                        corrected
+                                                
+                                } else if (is.na(condition)) {
+                                        ""
+                                } else {
+                                        tokens[i]
+                                }
+                        })
+                        
+                        tokens
                 }
                 
-                words %>% paste(collapse = " ")
+                tokens = tokens[!is.na(tokens) && !is.null(tokens)] %>% unlist()
+                print("tokens after spellchecking:")
+                print(tokens)
+                if (any(grepl('\\(\\"', tokens))) {
+                        warning("not separating characters after spellchecking!")
+                }
+                tokens
+        }
+        
+        removeStopWords <- function(tokens) {
+                print("Removing stop words...")
+                tokens = stringr::str_replace_all(tokens, stopwords_regex, '')
+                print("tokens after removing stopwords:")
+                tokens = Filter(function(x) !identical(character(0),x), tokens)
+                if (any(grepl('\\(\\"', tokens))) {
+                        warning("not separating characters after removing stopwords!")
+                }
+                tokens = Filter(function(f) nchar(f) > 0, tokens)
+                print(tokens)
+                tokens
         } 
         
-        
-        expandContractions <- function(word) {
-                ifelse(word %in% contractions[, 1], 
-                       contractions[which(contractions[, 1] %in% word), 2], 
-                       word) %>% 
-                        unlist() %>% 
-                        paste(collapse = " ") %>% 
-                        tokenize_regex("[^[:alpha:] ]| ") %>% 
-                        unlist() %>% 
-                        iconv("latin1", "ASCII", sub = "") %>% 
-                        gsub("([[:alpha:]])\\1{2,}", "\\1", .) %>%
-                        gsub(".*haha*.", "ha-ha", .) %>%
-                        (function(x) x[(!x == "")]) 
-        }
-
-        
-        spellCheck <- function(terms) {
-                
-                badwords = readRDS("badWordsDict.rds")
-                
-                if (is.list(terms)) {
-                        terms = unlist(terms)
-                }
-                
-                for (i in 1:length(terms)) {
-                        
-                        # print(terms[i])
-                        
-                        if (!identical(terms[i], character(0)) &&
-                            !identical(terms[i], NULL) &&
-                            !length(terms[i]) == 0) {
-                                
-                                word = terms[i]
-                                condition = word %in% badwords
-                                # print(cat("bad word?", condition))
-                                
-                                if (condition) {
-                                        word = "obscenity"
-                                } else {
-                                        condition = hunspell_check(word)
-                                        if (!condition && !is.na(condition)) {
-                                                corrected = hunspell_suggest(word)[[1]]
-                                                word = gsub(" ", "", corrected)[1]
-                                        } else {
-                                                word = word
-                                        }
-                                }
-                                
-                        # print(word)
-                        terms[i] = word
-
-                        } else {
-                                
-                                terms[i] = NULL
-                                
-                        }
-                }
-                
-                terms
-        }
-         
-                       
-        cleanSentence <- function(sentence) {
-                        tokenize_word_stems(sentence, 
-                                            language = "english", 
-                                            stopwords = stopwords("en"), 
-                                            simplify = T) %>% 
-                        sapply(expandContractions) %>%
-                        unname() %>%
-                        spellCheck()
+        stemWords <- function(tokens) {
+                tokens = hunspell_stem(tokens)
+                tokens %>% sapply(function(x) x[length(x)])
         }
         
-        line %>% 
-                expandAbbreviations() %>%
-                tokenize_sentences() %>% 
-                lapply(cleanSentence)
+        # Clean sentence
+        tokens = tokens %>% 
+                        expContract() %>% 
+                        expAbbv() %>%
+                        cleanWords() %>%
+                        spellCheck() %>%
+                        removeStopWords() %>%
+                        stemWords() %>%
+                        unlist() 
+        tokens[!is.na(tokens)]
+        
 }
 
 textStats <- function(fileStats) {
@@ -135,52 +209,48 @@ describeLines <- function(line) {
 }
 
 
-getWordFreq <- function(text) {
+getWordFreq <- function(tokenList) {
+        tic = proc.time()
+        oldw = getOption("warn")
+        options(warn = -1)
         
-        library(dplyr)
-        library(parallel)
-        library(pbapply)
-        # Start up a parallel cluster
-        cl = makeCluster(4L)
+        freqTables = tokenList %>% lapply(table)
+        terms = freqTables %>% unlist() %>% names() %>% unique() %>% sort()
         
-        print("Unlisting words...")
-        terms = pbsapply(text, function(x) unlist(x, recursive = T), cl = cl) %>% unlist()
-        print(cat("Finished unlisting", length(terms), "words"))
-
-        # close cluster connection
-        stopCluster(cl)
+        df = data.frame(Term = terms)
         
-        print("Computing term frequency matrix...")
-        # dtm = pbsapply(terms, table, cl = cl) %>% data.frame()
-        dtm = numeric(terms %>% unique %>% length)
-        names(dtm) = terms %>% unique %>% sort()
-
-        print(cat("Total unique terms:", length(dtm)))
-
-        pb = txtProgressBar(min = 0, max = length(terms), style = 3)
-
-        for (i in 1:length(terms)) {
-                if (terms[i] %in% names(dtm)) {
-                        dtm[which(terms[i] == names(dtm))] =
-                                dtm[which(terms[i] == names(dtm))] + 1
+        pb = txtProgressBar(min = 0, max = length(freqTables), style = 3)
+        
+        for (i in 1:length(freqTables)) {
+                # print(data.frame(freqTables[i]))
+                
+                if (nrow(data.frame(freqTables[i])) > 0) {
+                        df = df %>% left_join(data.frame(freqTables[i]), 
+                                              by = c("Term" = "Var1"))
                 }
+                
                 setTxtProgressBar(pb, i)
         }
-
-        dtm[!is.na(names(dtm))] %>%
-                data.frame(term = names(.), 
-                         Freq = .) %>%
-                arrange(desc(Freq))
+        close(pb)
+        
+        df[is.na(df)] = 0
+        
+        df = data.frame(df[, 1], apply(df[, -1], 1, sum))
+        colnames(df) = c("Term", "Freq")
+        
+        options(warn = oldw)
+        totTime = proc.time() - tic
+        print(paste("Processing time:", 
+                    totTime[3] %>% round(2) %>% seconds_to_period()))
+        df
 }
 
-getNGrams <- function(text, N = 2) {
+getNGrams <- function(tokenList, N = 2, ...) {
         
         library(dplyr)
         library(pbapply)
-        library(doParallel)
-        library(foreach)
 
-        getNgrams <- function(words, N) {
+        createNgrams <- function(words, N = 2) {
                 library(dplyr)
                 library(tokenizers)
                 words = paste(words, collapse = " ") %>% gsub("c", "", .)
@@ -190,41 +260,46 @@ getNGrams <- function(text, N = 2) {
         # Start up a parallel cluster
         cl = makeCluster(4L)
         print("processing Ngrams...")
-        nGrams = pbsapply(text, function(x) getNgrams(x, N), cl = cl) %>% unlist()
+        nGrams = lapply(tokenList, createNgrams, N)
+        head(nGrams)
         stopCluster(cl)
         
+        print(cat("Total unique Ngrams:", nGrams %>% unique() %>% length()))
+        
         print("Calculating Ngram frequencies...")
-        dtm = numeric(nGrams %>% unique() %>% length())
-        names(dtm) = nGrams %>% unique() %>% sort()
-
-        cl = makeCluster(4L)
-        registerDoParallel(cl)
-        pb = txtProgressBar(min = 0, max = length(nGrams), style = 3)
-        foreach(i = 1:length(nGrams)) %dopar% {
-                if (nGrams[i] %in% names(dtm)) {
-                        dtm[which(nGrams[i] == names(dtm))] =
-                                dtm[which(nGrams[i] == names(dtm))] + 1
+        
+        tic = proc.time()
+        oldw = getOption("warn")
+        options(warn = -1)
+        
+        freqTables = nGrams %>% lapply(table)
+        terms = freqTables %>% unlist() %>% names() %>% unique() %>% sort()
+        
+        df = data.frame(Term = terms)
+        
+        pb = txtProgressBar(min = 0, max = length(freqTables), style = 3)
+        
+        for (i in 1:length(freqTables)) {
+                
+                if (nrow(data.frame(freqTables[i])) > 0) {
+                        df = df %>% left_join(data.frame(freqTables[i]), 
+                                              by = c("Term" = "Var1"))
                 }
+                
                 setTxtProgressBar(pb, i)
         }
         close(pb)
-        stopCluster(cl)
         
-        print("Processing term-frequency dataframe...")
+        df[is.na(df)] = 0
         
-        dtmProcess <- function(dtm) {
-                library(dplyr)
-                dtm[!is.na(names(dtm))] %>%
-                        data.frame(term = names(.), 
-                                   Freq = .) %>%
-                        arrange(desc(Freq))
-        }
+        df = data.frame(df[, 1], apply(df[, -1], 1, sum))
+        colnames(df) = c("Term", "Freq")
         
-        cl = makeCluster(4L)
-        dtm = pbsapply(dtm, dtmProcess, cl = cl)
-        stopCluster(cl)
-        
-        dtm
+        options(warn = oldw)
+        totTime = proc.time() - tic
+        print(paste("Processing time:", 
+                    totTime[3] %>% round(2) %>% seconds_to_period()))
+        df
 }
 
 detectLanguage <- function(words) {
@@ -237,8 +312,10 @@ detectLanguage <- function(words) {
 dtm <- function(wordFreq) {
         library(dplyr)
         wordFreq %>%
-                mutate(Perc = Freq / sum(Freq) * 100,
-                       CumPerc = cumsum(Perc))
+                mutate(Perc = Freq / sum(Freq) * 100) %>% 
+                arrange(desc(Perc)) %>%
+                mutate(CumPerc = cumsum(Perc)) %>% 
+                arrange(desc(Perc))
 }
 
 replaceRedundant <- function(text){
@@ -250,12 +327,3 @@ replaceRedundant <- function(text){
                 paste(collapse = " ") %>%
                 gsub("list c  ", "", .)
 }
-
-
-# if (!is.null(condition) && 
-#     length(condition) > 1 && 
-#     !is.na(condition)) {
-#         
-#         word = word
-#         
-# }

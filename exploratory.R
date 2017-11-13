@@ -13,7 +13,7 @@ myObjects = list.files(data.folder, pattern = ".rds")
 other = myObjects %>% grep("^(bi|tri|ex|word)", .)
 myObjects = myObjects[-other]
 
-for (i in 1:length(myObjects)) {
+for (i in 2:length(myObjects)) {
         tic = proc.time()
         print(paste("Reading file:", myObjects[i], "..."))
         dat = readRDS(paste0(data.folder, myObjects[i]))
@@ -21,13 +21,15 @@ for (i in 1:length(myObjects)) {
         
         # word frequency
         print(paste("Calculating word frequency for:", myObjects[i], "..."))
-        wordFreq = dat %>% getWordFreq()
+        wordFreq = getWordFreq(myTokens)
+        head(wordFreq)
 
         # Bigrams
         print(paste("Calculating bigrams for:", myObjects[i], "..."))
         biGrams = dat %>% getNGrams(N = 2)
 
         # Trigrams
+        
         print(paste("Calculating trigrams for:", myObjects[i], "..."))
         triGrams = dat %>% getNGrams(N = 3)
 
@@ -60,8 +62,8 @@ for (i in 1:length(myObjects)) {
                            x = ~. %>% factor(), y = ~Perc)
 
         p = subplot(percPlot, biGramPlot, triGramPlot, langPlot, nrows = 2)
-        api_create(p, filename = paste("Frequencies", myObjects[i]),
-                   fileopt = "overwrite", sharing = "public")
+        # api_create(p, filename = paste("Frequencies", myObjects[i]),
+        #            fileopt = "overwrite", sharing = "public")
         print("Finished creating plots.")
 
         print(paste("Saving objects for:", myObjects[i], "..."))
