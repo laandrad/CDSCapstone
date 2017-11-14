@@ -1,5 +1,5 @@
-# remove contractions, bad words, and punctuation
 
+# remove contractions, bad words, and punctuation
 cleanSentence <- function(sentence) {
         library(dplyr)
         library(tokenizers)
@@ -208,99 +208,209 @@ describeLines <- function(line) {
         return(list(numbWords, lineLength))
 }
 
-
-getWordFreq <- function(tokenList) {
+parallelWordCount <- function(myTokens, nPartitions = 4) {
+        
+        library(dplyr)
+        library(parallel)
+        library(pbapply)
+        
         tic = proc.time()
-        oldw = getOption("warn")
-        options(warn = -1)
+        print("Mapping...")
+        nPartitions = nPartitions
+        totalSentences = myTokens %>% length()
+        # print(totalSentences)
+        # print(nPartitions)
+        partLength = round(totalSentences / nPartitions)
+        # print(partLength)
+        parts = gl(n = nPartitions, k = partLength, length = totalSentences)
+        # print(parts)
         
-        freqTables = tokenList %>% lapply(table)
-        terms = freqTables %>% unlist() %>% names() %>% unique() %>% sort()
-        
-        df = data.frame(Term = terms)
-        
-        pb = txtProgressBar(min = 0, max = length(freqTables), style = 3)
-        
-        for (i in 1:length(freqTables)) {
-                # print(data.frame(freqTables[i]))
+        wordCount <- function(tokenList) {
                 
-                if (nrow(data.frame(freqTables[i])) > 0) {
-                        df = df %>% left_join(data.frame(freqTables[i]), 
-                                              by = c("Term" = "Var1"))
+                oldw = getOption("warn")
+                options(warn = -1)
+                
+                # print(tokenList)
+                freqTables = tokenList %>% lapply(table)
+                terms = freqTables %>% unlist() %>% names() %>% unique() %>% sort()
+                
+                df = data.frame(Term = terms)
+                # print(head(df))
+                
+                for (i in 1:length(freqTables)) {
+                        
+                        # if (nrow(data.frame(freqTables[i])) > 0) {
+                                df = df %>% left_join(data.frame(freqTables[i]), 
+                                                      by = c("Term" = "Var1"))
+                        # }
                 }
                 
-                setTxtProgressBar(pb, i)
+                df[is.na(df)] = 0
+                
+                if (ncol(df) > 0) {
+                        df = data.frame(df[, 1], apply(df[, -1], 1, sum))
+                        colnames(df) = c("Term", "Freq")
+                }
+                
+                options(warn = oldw)
+                # print(head(df))
+                
+                df
+        }
+        
+        print("Shuffling...")
+        cl = makeCluster(4L)
+        tl = pbsapply(1:nPartitions, function(i) {
+                library(dplyr)
+                myTokens[parts == as.character(i)] %>% wordCount()
+        }, cl = cl)
+        stopCluster(cl)
+        # print(str(tl))
+        
+        print("Reduction...")
+        dt = data.frame(Term = tl[1])
+        colnames(dt) = "Term"
+        
+        # print(head(dt))
+        print(length(seq(1, length(tl), 2)))
+        
+        pb = txtProgressBar(min = 0, max = length(seq(1, length(tl), 2)), style = 3)
+        for (i in seq(1, length(tl), 2)) {
+                        df = data.frame(Term = tl[i], Freq = tl[i + 1])
+                        # print(i)
+                        # print(head(df))
+                        colnames(df) = c("Term", "Freq")
+                        dt = dt %>% left_join(df, by = c("Term" = "Term"))
+                setTxtProgressBar(pb, i + 1)
         }
         close(pb)
         
-        df[is.na(df)] = 0
+        dt[is.na(dt)] = 0
+        dt = data.frame(dt[, 1], apply(dt[, -1], 1, sum))
+        colnames(dt) = c("Term", "Freq")
         
-        df = data.frame(df[, 1], apply(df[, -1], 1, sum))
-        colnames(df) = c("Term", "Freq")
-        
-        options(warn = oldw)
         totTime = proc.time() - tic
         print(paste("Processing time:", 
                     totTime[3] %>% round(2) %>% seconds_to_period()))
-        df
+        
+        print(head(dt))
+        dt
+        
 }
 
-getNGrams <- function(tokenList, N = 2, ...) {
+parallelNGramCount <- function(myTokens, N = 2, nPartitions = 4) {
         
         library(dplyr)
+        library(parallel)
         library(pbapply)
-
-        createNgrams <- function(words, N = 2) {
+        
+        tic = proc.time()
+        
+        createNgrams <- function(words, N = N) {
                 library(dplyr)
                 library(tokenizers)
                 words = paste(words, collapse = " ") %>% gsub("c", "", .)
                 tokenize_ngrams(x = words, n = N, simplify = T)
         }
-
+        
         # Start up a parallel cluster
         cl = makeCluster(4L)
         print("processing Ngrams...")
-        nGrams = lapply(tokenList, createNgrams, N)
-        head(nGrams)
+        nGrams = pblapply(myTokens, createNgrams, N = N)
+        print(head(nGrams))
         stopCluster(cl)
         
-        print(cat("Total unique Ngrams:", nGrams %>% unique() %>% length()))
+        print(paste("Total unique Ngrams:", nGrams %>% unique() %>% length()))
         
         print("Calculating Ngram frequencies...")
         
-        tic = proc.time()
         oldw = getOption("warn")
         options(warn = -1)
         
-        freqTables = nGrams %>% lapply(table)
-        terms = freqTables %>% unlist() %>% names() %>% unique() %>% sort()
+        print("Mapping...")
+        nPartitions = nPartitions
+        totalSentences = nGrams %>% length()
+        # print(totalSentences)
+        # print(nPartitions)
+        partLength = round(totalSentences / nPartitions)
+        # print(partLength)
+        parts = gl(n = nPartitions, k = partLength, length = totalSentences)
+        # print(parts)
         
-        df = data.frame(Term = terms)
-        
-        pb = txtProgressBar(min = 0, max = length(freqTables), style = 3)
-        
-        for (i in 1:length(freqTables)) {
+        wordCount <- function(tokenList) {
                 
-                if (nrow(data.frame(freqTables[i])) > 0) {
-                        df = df %>% left_join(data.frame(freqTables[i]), 
-                                              by = c("Term" = "Var1"))
+                oldw = getOption("warn")
+                options(warn = -1)
+                
+                # print(tokenList)
+                freqTables = tokenList %>% lapply(table)
+                terms = freqTables %>% unlist() %>% names() %>% unique() %>% sort()
+                
+                df = data.frame(Term = terms)
+                # print(head(df))
+                
+                for (i in 1:length(freqTables)) {
+                        
+                        if (nrow(data.frame(freqTables[i])) > 0) {
+                                # print(data.frame(freqTables[i]))
+                                df = df %>% left_join(data.frame(freqTables[i]), 
+                                                      by = c("Term" = "Var1"))
+                        }
                 }
                 
-                setTxtProgressBar(pb, i)
+                df[is.na(df)] = 0
+                
+                if (ncol(df) > 0) {
+                        df = data.frame(df[, 1], apply(df[, -1], 1, sum))
+                        colnames(df) = c("Term", "Freq")
+                }
+                
+                options(warn = oldw)
+                # print(head(df))
+                
+                df
+        }
+        
+        print("Shuffling...")
+        cl = makeCluster(4L)
+        tl = pbsapply(1:nPartitions, function(i) {
+                library(dplyr)
+                nGrams[parts == as.character(i)] %>% wordCount()
+        }, cl = cl)
+        stopCluster(cl)
+        # print(str(tl))
+        
+        print("Reduction...")
+        dt = data.frame(Term = tl[1])
+        colnames(dt) = "Term"
+        
+        # print(head(dt))
+        print(length(seq(1, length(tl), 2)))
+        
+        pb = txtProgressBar(min = 0, max = length(seq(1, length(tl), 2)), style = 3)
+        for (i in seq(1, length(tl), 2)) {
+                df = data.frame(Term = tl[i], Freq = tl[i + 1])
+                # print(i)
+                # print(head(df))
+                colnames(df) = c("Term", "Freq")
+                dt = dt %>% left_join(df, by = c("Term" = "Term"))
+                setTxtProgressBar(pb, i + 1)
         }
         close(pb)
         
-        df[is.na(df)] = 0
+        dt[is.na(dt)] = 0
+        dt = data.frame(dt[, 1], apply(dt[, -1], 1, sum))
+        colnames(dt) = c("Term", "Freq")
         
-        df = data.frame(df[, 1], apply(df[, -1], 1, sum))
-        colnames(df) = c("Term", "Freq")
-        
-        options(warn = oldw)
         totTime = proc.time() - tic
         print(paste("Processing time:", 
                     totTime[3] %>% round(2) %>% seconds_to_period()))
-        df
+        
+        # print(head(dt))
+        dt
+        
 }
+
 
 detectLanguage <- function(words) {
         library(dplyr)
@@ -318,12 +428,20 @@ dtm <- function(wordFreq) {
                 arrange(desc(Perc))
 }
 
-replaceRedundant <- function(text){
-        paste(text, collapse = " ") %>%
-                strsplit(split = "(?!')[ [:punct:]]", fixed = F, perl = T) %>%
-                unlist() %>%
-                trimws() %>%
-                unique() %>%
-                paste(collapse = " ") %>%
-                gsub("list c  ", "", .)
+myPlotCoverage <- function(dtf, dtf1, dtf2) {
+        p1 = plot_ly(data = dtf, type = "scatter", mode = "lines", name = "Terms",
+                     x = ~seq_along(CumPerc), y = ~CumPerc) %>%
+                layout(xaxis = list(title = "Number of Terms"))
+        p2 = plot_ly(data = dtf2, type = "scatter", mode = "lines", name = "BiGrams",
+                     x = ~seq_along(CumPerc), y = ~CumPerc) %>%
+                layout(xaxis = list(title = "Number of BiGrams"))
+        p3 = plot_ly(data = dtf3, type = "scatter", mode = "lines", name = "TriGrams",
+                     x = ~seq_along(CumPerc), y = ~CumPerc) %>%
+                layout(xaxis = list(title = "Number of TriGrams"))
+        p = subplot(p1, p2, p3, nrows = 1, shareY = T, titleX = T) %>%
+                layout(title = myFiles[i],
+                       yaxis = list(title = "% Coverage"))
+        plotly_IMAGE(p, format = "png", 
+                     out_file = paste0(data.folder, "coverage_terms_", objName, ".png"))
+        p
 }

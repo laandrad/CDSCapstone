@@ -3,6 +3,10 @@ library(lubridate)
 library(tokenizers)
 library(parallel)
 library(pbapply)
+library(plotly)
+
+Sys.setenv("plotly_username" = "landrad78")
+Sys.setenv("plotly_api_key" = "JUuLrFcCqExiWblQbHup")
 
 source("myFunctions.R")
 
@@ -10,21 +14,22 @@ source("myFunctions.R")
 data.folder = "/Users/alejandro/Coursera Data Science Capstone Data/en_US/"
 myFiles = list.files(data.folder, pattern = ".txt")
 
-linesToRead = 800000
+linesToRead = 8000
 
 stats = NULL
 
-tic = proc.time()
-
-# Read a chunck of data
 i = 1
 for (i in 1:length(myFiles)) {
+        
+        tic = proc.time()
+        
+        # Read a chunck of data
         print(paste("Reading file:", myFiles[i], "..."))
         con = file(paste0(data.folder, myFiles[i]), "r")
         
         # myLines = readLines(con)
         myLines = readLines(con, linesToRead)
-        close(con)
+
         print("Finished reading file.")
         
         # Open parallel computing
@@ -55,21 +60,21 @@ for (i in 1:length(myFiles)) {
         
         # word frequency
         print(paste("Calculating word frequency for:", myFiles[i], "..."))
-        wordFreq = getWordFreq(myTokens)
+        wordFreq = parallelWordCount(myTokens)
         head(wordFreq)
         print(paste("Saving objects for:", myFiles[i], "..."))
         saveRDS(wordFreq, paste0(data.folder, "wordFreq_", objName[i]))
         
         # Bigrams
         print(paste("Calculating bigrams for:", myFiles[i], "..."))
-        biGrams = getNGrams(myTokens, N = 2)
+        biGrams = parallelNGramCount(myTokens, N = 2)
         head(biGrams)
         print(paste("Saving objects for:", myFiles[i], "..."))
         saveRDS(biGrams, paste0(data.folder, "biGrams_", objName[i]))
         
         # Trigrams
         print(paste("Calculating trigrams for:", myFiles[i], "..."))
-        triGrams = getNGrams(myTokens, N = 3)
+        triGrams = parallelNGramCount(myTokens, N = 3)
         head(triGrams)
         print(paste("Saving objects for:", myFiles[i], "..."))
         saveRDS(triGrams, paste0(data.folder, "triGrams_", objName[i]))
@@ -82,7 +87,6 @@ for (i in 1:length(myFiles)) {
         languages = languages[!is.na(languages)] %>% table %>% data.frame()
         head(languages)
         print(paste("Saving objects for:", myFiles[i], "..."))
-        print(paste("Saving objects for:", myObjects[i], "..."))
         saveRDS(languages, paste0(data.folder, "languages_", objName[i]))
         
         # Plots
@@ -92,19 +96,8 @@ for (i in 1:length(myFiles)) {
         dtf3 = dtm(triGrams)
         dtl = dtm(languages)
         
-        par(mfrow = c(2, 2))
-        plot(x = seq_along(dtf$CumPerc), y = dtf$CumPerc, type = "l", 
-             xlab = "Number of Terms", ylab = "Coverage", 
-             main = "Words")
-        plot(x = seq_along(dtf2$CumPerc), y = dtf2$CumPerc, type = "l", 
-             xlab = "Number of Terms", ylab = "Coverage", 
-             main = "Bigrams")
-        plot(x = seq_along(dtf3$CumPerc), y = dtf3$CumPerc, type = "l", 
-             xlab = "Number of Terms", ylab = "Coverage", 
-             main = "Trigrams")
-        barplot(dtl$Perc, names.arg = dtl$., 
-                main = "Languages")
-        title(myFiles[i], side = 3, line = -1, outer = TRUE)
+        print(paste("saving plot to:", paste0("coverage_terms_", objName, ".png")))
+        myPlotCoverage(dtf, dtf2, dtf3)
         print("Finished plotting.")
         
         dtl
