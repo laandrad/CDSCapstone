@@ -42,8 +42,7 @@ for (i in 1:length(myFiles)) {
         # clean text
         print(paste("Cleaning sampled text in file:", myFiles[i], "..."))
         myText = pblapply(myLinesSample, cleanLine, cl = cl)
-        # myText = parLapply(cl, myLinesSample, cleanLine)
-
+        
         # save objects to hard drive
         print("Saving objects...")
         objName = strsplit(myFiles[i], split = "\\.")[[1]][2]
