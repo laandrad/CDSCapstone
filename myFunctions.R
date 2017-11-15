@@ -239,10 +239,10 @@ parallelWordCount <- function(myTokens, nPartitions = 4) {
                 
                 for (i in 1:length(freqTables)) {
                         
-                        # if (nrow(data.frame(freqTables[i])) > 0) {
+                        if (nrow(data.frame(freqTables[i])) > 0) {
                                 df = df %>% left_join(data.frame(freqTables[i]), 
                                                       by = c("Term" = "Var1"))
-                        # }
+                        }
                 }
                 
                 df[is.na(df)] = 0
@@ -276,6 +276,9 @@ parallelWordCount <- function(myTokens, nPartitions = 4) {
         
         pb = txtProgressBar(min = 0, max = length(seq(1, length(tl), 2)), style = 3)
         for (i in seq(1, length(tl), 2)) {
+                        # print(head(tl[[i]]))
+                        # print(head(tl[[i + 1]]))
+                
                         df = data.frame(Term = tl[i], Freq = tl[i + 1])
                         # print(i)
                         # print(head(df))
@@ -309,7 +312,7 @@ parallelNGramCount <- function(myTokens, N = 2, nPartitions = 4) {
         createNgrams <- function(words, N = N) {
                 library(dplyr)
                 library(tokenizers)
-                words = paste(words, collapse = " ") %>% gsub("c", "", .)
+                words = paste(words, collapse = " ") %>% gsub("c ", "", .)
                 tokenize_ngrams(x = words, n = N, simplify = T)
         }
         
@@ -317,7 +320,7 @@ parallelNGramCount <- function(myTokens, N = 2, nPartitions = 4) {
         cl = makeCluster(4L)
         print("processing Ngrams...")
         nGrams = pblapply(myTokens, createNgrams, N = N)
-        print(head(nGrams))
+        # print(head(nGrams))
         stopCluster(cl)
         
         print(paste("Total unique Ngrams:", nGrams %>% unique() %>% length()))
@@ -415,7 +418,7 @@ parallelNGramCount <- function(myTokens, N = 2, nPartitions = 4) {
 detectLanguage <- function(words) {
         library(dplyr)
         library(cld2)
-        words = paste(words, collapse = " ") %>% gsub("c", "", .)
+        words = paste(words, collapse = " ") %>% gsub("c\\(", "", .)
         detect_language(words)
 }
 
