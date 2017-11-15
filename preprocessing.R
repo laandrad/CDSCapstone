@@ -14,7 +14,7 @@ source("myFunctions.R")
 data.folder = "/Users/alejandro/Coursera Data Science Capstone Data/en_US/"
 myFiles = list.files(data.folder, pattern = ".txt")
 
-linesToRead = 8000
+linesToRead = 80000
 
 stats = NULL
 
@@ -60,24 +60,24 @@ for (i in 1:length(myFiles)) {
         
         # word frequency
         print(paste("Calculating word frequency for:", myFiles[i], "..."))
-        wordFreq = parallelWordCount(myTokens)
+        wordFreq = parallelWordCount(myTokens, nPartitions = 10)
         head(wordFreq)
         print(paste("Saving objects for:", myFiles[i], "..."))
-        saveRDS(wordFreq, paste0(data.folder, "wordFreq_", objName[i]))
+        saveRDS(wordFreq, paste0(data.folder, "wordFreq_", objName))
         
         # Bigrams
         print(paste("Calculating bigrams for:", myFiles[i], "..."))
-        biGrams = parallelNGramCount(myTokens, N = 2)
+        biGrams = parallelNGramCount(myTokens, N = 2, nPartitions = 10)
         head(biGrams)
         print(paste("Saving objects for:", myFiles[i], "..."))
-        saveRDS(biGrams, paste0(data.folder, "biGrams_", objName[i]))
+        saveRDS(biGrams, paste0(data.folder, "biGrams_", objName))
         
         # Trigrams
         print(paste("Calculating trigrams for:", myFiles[i], "..."))
-        triGrams = parallelNGramCount(myTokens, N = 3)
+        triGrams = parallelNGramCount(myTokens, N = 3, nPartitions = 10)
         head(triGrams)
         print(paste("Saving objects for:", myFiles[i], "..."))
-        saveRDS(triGrams, paste0(data.folder, "triGrams_", objName[i]))
+        saveRDS(triGrams, paste0(data.folder, "triGrams_", objName))
         
         # Detect languages
         cl = makeCluster(4L)
@@ -87,7 +87,7 @@ for (i in 1:length(myFiles)) {
         languages = languages[!is.na(languages)] %>% table %>% data.frame()
         head(languages)
         print(paste("Saving objects for:", myFiles[i], "..."))
-        saveRDS(languages, paste0(data.folder, "languages_", objName[i]))
+        saveRDS(languages, paste0(data.folder, "languages_", objName))
         
         # Plots
         print(paste("Creating plots for:", myFiles[i], "..."))
