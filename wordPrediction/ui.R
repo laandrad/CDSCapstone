@@ -9,12 +9,17 @@ shinyUI(fluidPage(
   # Sidebar with a slider input for number of bins 
   sidebarLayout(
     sidebarPanel(
-            textInput("word", "Type a word...")
+            textInput("sentence", "Type a sentence...")
     ),
     
     # Show a plot of the generated distribution
     mainPanel(
-            textOutput("predWord")
+            p(strong("My prediction of your next word is...")),
+            textOutput("predWord"),
+            p(),
+            p(),
+            p(em("Alternative suggestions...")),
+            textOutput("altWords")
     )
   )
 ))
