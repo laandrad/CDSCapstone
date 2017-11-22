@@ -1,22 +1,23 @@
 
 # remove contractions, bad words, and punctuation
-cleanSentence <- function(sentence) {
+cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
         library(dplyr)
         library(tokenizers)
         library(qdapDictionaries)
+        library(hunspell)
         
-        # converting sentence into tokens
+        # 1 . Convert sentence into tokens
         print("tokenizing...")
         if (length(sentence) == 0) {
                 warning("no words in sentence! Skipping sentence")
                 print(sentence)
                 sentence = list(NULL)
         }
-        print(sentence)
+        
         tokens = sentence %>% 
                 tokenize_words() %>% 
                 unlist()
-        print(tokens)
+        
         if (length(tokens) == 0) {
                 warning("no tokens in sentence! Skipping sentence")
                 print(tokens)
@@ -26,6 +27,8 @@ cleanSentence <- function(sentence) {
                 print(tokens)
                 warning("token vector is null or na!")
         }
+        
+        # 2. Remove numbers and non-ASCII
         print("removing numbers and non-ASCII characters...")
         tokens = tokens %>%
                 gsub("'", "~", .) %>%
@@ -39,7 +42,7 @@ cleanSentence <- function(sentence) {
                 warning("token vector is null or na!")
         }
         
-        # Loading dictionaries for token cleaning
+        # 3. Load dictionaries for token cleaning
         contracted = contractions[, 1] %>% tokenize_words() %>% 
                 unlist() %>% gsub("'", "~", .)
         expanded = contractions[, 2] %>% tokenize_words() %>% unlist()
@@ -52,7 +55,7 @@ cleanSentence <- function(sentence) {
         stopwords_regex = paste(stopwords('en'), collapse = '\\b|\\b')
         stopwords_regex = paste0('\\b', stopwords_regex, '\\b')
         
-        # Define functions
+        # 4. Define functions
         expContract <- function(tokens) {
                 print("Expanding contractions...")
                 sapply(1:length(tokens), function(i) {
@@ -116,13 +119,17 @@ cleanSentence <- function(sentence) {
                                         tokens[i] = ""
                                         }
                                 library(hunspell)
-                                condition = hunspell_check(tokens[i] %>% as.character())
+                                condition = hunspell_check(tokens[i] %>% 
+                                                                as.character(),
+                                                           dict = dictionary(language))
                                 # str(condition)
                                 if (!condition && 
                                     !is.na(condition) && 
                                     !length(condition) == 0) {
-                                        corrected = hunspell_suggest(tokens[i] %>% 
-                                                                             as.character())[[1]]
+                                        corrected = hunspell_suggest(tokens[i] 
+                                                                     %>% 
+                                                        as.character(),
+                                                        dict = dictionary(language))[[1]]
                                         if (length(corrected) > 1) {
                                                 corrected = corrected[2]
                                         }
@@ -162,12 +169,13 @@ cleanSentence <- function(sentence) {
         } 
         
         stemWords <- function(tokens) {
-                tokens = hunspell_stem(tokens)
+                tokens = hunspell_stem(tokens, dict = dictionary(language))
                 tokens %>% sapply(function(x) x[length(x)])
         }
         
-        # Clean sentence
-        tokens = tokens %>% 
+        # 5. Perform Clean sentences
+        if (stem == T) {
+                tokens = tokens %>% 
                         expContract() %>% 
                         expAbbv() %>%
                         cleanWords() %>%
@@ -175,7 +183,17 @@ cleanSentence <- function(sentence) {
                         removeStopWords() %>%
                         stemWords() %>%
                         unlist() 
-        tokens[!is.na(tokens)]
+                tokens[!is.na(tokens)]
+        } else {
+                tokens = tokens %>% 
+                        expContract() %>% 
+                        expAbbv() %>%
+                        cleanWords() %>%
+                        spellCheck() %>%
+                        removeStopWords() %>%
+                        unlist() 
+                tokens[!is.na(tokens)]
+        }
         
 }
 
@@ -272,7 +290,7 @@ parallelWordCount <- function(myTokens, nPartitions = 4) {
         colnames(dt) = "Term"
         
         # print(head(dt))
-        print(length(seq(1, length(tl), 2)))
+        # print(length(seq(1, length(tl), 2)))
         
         pb = txtProgressBar(min = 0, max = length(seq(1, length(tl), 2)), style = 3)
         for (i in seq(1, length(tl), 2)) {
@@ -296,7 +314,7 @@ parallelWordCount <- function(myTokens, nPartitions = 4) {
         print(paste("Processing time:", 
                     totTime[3] %>% round(2) %>% seconds_to_period()))
         
-        print(head(dt))
+        # print(head(dt))
         dt
         
 }
@@ -388,7 +406,7 @@ parallelNGramCount <- function(myTokens, N = 2, nPartitions = 4) {
         colnames(dt) = "Term"
         
         # print(head(dt))
-        print(length(seq(1, length(tl), 2)))
+        # print(length(seq(1, length(tl), 2)))
         
         pb = txtProgressBar(min = 0, max = length(seq(1, length(tl), 2)), style = 3)
         for (i in seq(1, length(tl), 2)) {
@@ -432,6 +450,12 @@ dtm <- function(wordFreq) {
 }
 
 myPlotCoverage <- function(dtf, dtf1, dtf2) {
+        
+        library(plotly)
+        
+        Sys.setenv("plotly_username" = "landrad78")
+        Sys.setenv("plotly_api_key" = "JUuLrFcCqExiWblQbHup")
+        
         p1 = plot_ly(data = dtf, type = "scatter", mode = "lines", name = "Terms",
                      x = ~seq_along(CumPerc), y = ~CumPerc) %>%
                 layout(xaxis = list(title = "Number of Terms"))
@@ -446,5 +470,7 @@ myPlotCoverage <- function(dtf, dtf1, dtf2) {
                        yaxis = list(title = "% Coverage"))
         plotly_IMAGE(p, format = "png", 
                      out_file = paste0(data.folder, "coverage_terms_", objName, ".png"))
+        api_create(p, paste0(data.folder, "coverage_terms_", objName), 
+                   fileopt = "overwrite", sharing = "public")
         p
 }

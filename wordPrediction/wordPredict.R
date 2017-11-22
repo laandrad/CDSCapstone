@@ -1,14 +1,23 @@
 # word Prediction
-wordPredict <- function(word, biGrams) {
+wordPredict <- function(sentence, biGrams) {
         
-        word = cleanSentence(word)
-        
-        if (word %in% biGrams$V1) {
-                predWord = filter(biGrams, V1 == word)
-                predWord[which.max(predWord$Freq), "V2"] %>%
-                        as.character()
-        } else {
-                sample(biGrams$V2, 1) %>% as.character()
+        if (!is.null(sentence) &&
+            !is.na(sentence) &&
+            nchar(sentence) > 0) {
+
+                sentence = cleanSentence(sentence)
+                
+                word = sentence %>% strsplit(., " ") %>% unlist()
+                word = word[length(word)]
+                
+                if (word %in% biGrams$V1) {
+                        predWords = filter(biGrams, V1 == word)
+                        prediction = predWords[which.max(predWords$Freq), "V2"] %>%
+                                        as.character()
+                        return(list(prediction, predWords$V2 %>% as.vector()))
+                } else {
+                        return(list(NULL, sample(biGrams$V2, 1) %>% as.character()))
+                }
         }
 }
 
