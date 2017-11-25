@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/333846/3e3fad3fa43742c29e5fcd373f9c071e
+bundleId: https://api.rpubs.com/api/v1/document/333846/3e3fad3fa43742c29e5fcd373f9c071e
+url: http://rpubs.com/laandrad/333846
+when: 1511636849.67059

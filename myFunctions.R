@@ -1,10 +1,13 @@
 
 # remove contractions, bad words, and punctuation
-cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
+cleanSentence <- function(sentence, language = "en_US", stem = F) {
         library(dplyr)
         library(tokenizers)
         library(qdapDictionaries)
-        library(hunspell)
+        # library(hunspell)
+        
+        print("Original sentence:")
+        print(sentence)
         
         # 1 . Convert sentence into tokens
         print("tokenizing...")
@@ -31,7 +34,6 @@ cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
         # 2. Remove numbers and non-ASCII
         print("removing numbers and non-ASCII characters...")
         tokens = tokens %>%
-                gsub("'", "~", .) %>%
                 iconv("latin1", "ASCII", sub = "") %>%
                 gsub("[0-9]", "", .) %>%
                 .[. != ""]
@@ -43,14 +45,6 @@ cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
         }
         
         # 3. Load dictionaries for token cleaning
-        contracted = contractions[, 1] %>% tokenize_words() %>% 
-                unlist() %>% gsub("'", "~", .)
-        expanded = contractions[, 2] %>% tokenize_words() %>% unlist()
-        abbreviations = rbind(abbreviations,
-                              data.frame(abv = "T.V.",
-                                         rep = "Television"))
-        abbrev = abbreviations[, 1] %>% tokenize_words() %>% unlist()
-        abbExp = abbreviations[, 2] %>% tokenize_words() %>% unlist()
         badwords = readRDS("badWordsDict.rds")
         stopwords_regex = paste(stopwords('en'), collapse = '\\b|\\b')
         stopwords_regex = paste0('\\b', stopwords_regex, '\\b')
@@ -58,32 +52,18 @@ cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
         # 4. Define functions
         expContract <- function(tokens) {
                 print("Expanding contractions...")
-                sapply(1:length(tokens), function(i) {
-                        condition = tokens[i] %in% contracted
-                        if (condition && 
-                            !is.na(condition) &&
-                            !length(condition) == 0) {
-                                item = (which(contracted %in% tokens[i]) - 1) * 2
-                                expanded[item:(item + 1)]
-                        } else {
-                                tokens[i]
-                        }
-                }) %>% unlist()
-        }
-        
-        expAbbv <- function(tokens) {
-                print("Expanding abbreviations")
-                sapply(1:length(tokens), function(i) {
-                        condition = tokens[i] %in% abbrev
-                        if (condition && 
-                            !is.na(condition) && 
-                            !length(condition) == 0) {
-                                item = (which(abbrev %in% tokens[i]) - 1) * 2
-                                abbExp[item:(item + 1)]  
-                        } else {
-                                tokens[i]
-                        }
-                })
+                if (!identical(character(0), tokens)) {
+                        tokens = tokens %>% gsub("'ve", " have", .) %>%
+                                gsub("'s", " is", .) %>%
+                                gsub("'m", " am", .) %>%
+                                gsub("'ll", " will", .) %>%
+                                gsub("'d", " would", .) %>%
+                                gsub("n't", " not", .) %>%
+                                gsub("'re", " are", .) %>%
+                                tokenize_words() %>% unlist()
+                }
+                # print(tokens)
+                tokens
         }
         
         cleanWords <- function(tokens) {
@@ -98,31 +78,25 @@ cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
                                 tokens[i]
                         }
                 })
-                print("tokens after removing badwords:")
+                # print("tokens after removing badwords:")
                 tokens = sapply(tokens, function(x) x[!is.na(x)]) %>% unlist()
                 tokens = Filter(function(x) !identical(character(0),x), tokens)
-                badTokens = grepl("obscenity", tokens)
-                tokens = tokens[!badTokens]
-                print(tokens)
-                tokens
+                tokens = tokens %>% gsub("obscenity", NA, .) %>% .[!is.na(.)]
+                # print(tokens)
+                tokens %>% unname()
         }
         
         spellCheck <- function(tokens) {
                 print("Spell checking...")
-                tokens = gsub("~", "", tokens)
-                print("tokens read for spellchecking:")
-                print(tokens)
                 if (!identical(character(0), tokens) && length(tokens) > 0) {
                         tokens = sapply(1:length(tokens), function(i) {
-                                # print(tokens[i])
                                 if (is.na(tokens[i])) {
                                         tokens[i] = ""
                                         }
-                                library(hunspell)
+                                library(hunspell) %>% suppressWarnings()
                                 condition = hunspell_check(tokens[i] %>% 
                                                                 as.character(),
                                                            dict = dictionary(language))
-                                # str(condition)
                                 if (!condition && 
                                     !is.na(condition) && 
                                     !length(condition) == 0) {
@@ -147,8 +121,6 @@ cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
                 }
                 
                 tokens = tokens[!is.na(tokens) && !is.null(tokens)] %>% unlist()
-                print("tokens after spellchecking:")
-                print(tokens)
                 if (any(grepl('\\(\\"', tokens))) {
                         warning("not separating characters after spellchecking!")
                 }
@@ -156,7 +128,7 @@ cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
         }
         
         removeStopWords <- function(tokens) {
-                print("Removing stop words...")
+                print("Removing stopwords...")
                 tokens = stringr::str_replace_all(tokens, stopwords_regex, '')
                 print("tokens after removing stopwords:")
                 tokens = Filter(function(x) !identical(character(0),x), tokens)
@@ -164,7 +136,6 @@ cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
                         warning("not separating characters after removing stopwords!")
                 }
                 tokens = Filter(function(f) nchar(f) > 0, tokens)
-                print(tokens)
                 tokens
         } 
         
@@ -174,27 +145,22 @@ cleanSentence <- function(sentence, language = "en_US", stem = TRUE) {
         }
         
         # 5. Perform Clean sentences
+        tokens = tokens %>% 
+                expContract() %>%
+                cleanWords() %>%
+                spellCheck() %>%
+                # removeStopWords() %>%
+                unlist() 
+        tokens = tokens[!is.na(tokens)]
+        
         if (stem == T) {
                 tokens = tokens %>% 
-                        expContract() %>% 
-                        expAbbv() %>%
-                        cleanWords() %>%
-                        spellCheck() %>%
-                        removeStopWords() %>%
                         stemWords() %>%
                         unlist() 
-                tokens[!is.na(tokens)]
-        } else {
-                tokens = tokens %>% 
-                        expContract() %>% 
-                        expAbbv() %>%
-                        cleanWords() %>%
-                        spellCheck() %>%
-                        removeStopWords() %>%
-                        unlist() 
-                tokens[!is.na(tokens)]
         }
         
+        print(tokens)
+        tokens
 }
 
 textStats <- function(fileStats) {
@@ -236,24 +202,19 @@ parallelWordCount <- function(myTokens, nPartitions = 4) {
         print("Mapping...")
         nPartitions = nPartitions
         totalSentences = myTokens %>% length()
-        # print(totalSentences)
-        # print(nPartitions)
         partLength = round(totalSentences / nPartitions)
-        # print(partLength)
         parts = gl(n = nPartitions, k = partLength, length = totalSentences)
-        # print(parts)
         
         wordCount <- function(tokenList) {
                 
                 oldw = getOption("warn")
                 options(warn = -1)
                 
-                # print(tokenList)
                 freqTables = tokenList %>% lapply(table)
-                terms = freqTables %>% unlist() %>% names() %>% unique() %>% sort()
+                terms = freqTables %>% unlist() %>% 
+                        names() %>% unique() %>% sort()
                 
                 df = data.frame(Term = terms)
-                # print(head(df))
                 
                 for (i in 1:length(freqTables)) {
                         
@@ -271,50 +232,47 @@ parallelWordCount <- function(myTokens, nPartitions = 4) {
                 }
                 
                 options(warn = oldw)
-                # print(head(df))
-                
                 df
         }
         
         print("Shuffling...")
         cl = makeCluster(4L)
-        tl = pbsapply(1:nPartitions, function(i) {
+        termList = pblapply(1:nPartitions, function(i) {
                 library(dplyr)
                 myTokens[parts == as.character(i)] %>% wordCount()
         }, cl = cl)
         stopCluster(cl)
-        # print(str(tl))
         
         print("Reduction...")
-        dt = data.frame(Term = tl[1])
-        colnames(dt) = "Term"
-        
-        # print(head(dt))
-        # print(length(seq(1, length(tl), 2)))
-        
-        pb = txtProgressBar(min = 0, max = length(seq(1, length(tl), 2)), style = 3)
-        for (i in seq(1, length(tl), 2)) {
-                        # print(head(tl[[i]]))
-                        # print(head(tl[[i + 1]]))
+        reduce <- function(termList) {
+                dt = data.frame(
+                        Term = sapply(1:length(termList), function(i) 
+                        levels(termList[[i]]$Term)) %>% unlist() %>% unique()
+                        )
+
+                pb = txtProgressBar(min = 0, 
+                                    max = length(termList), 
+                                    style = 3)
+                for (i in 1:length(termList)) {
+                        if (!identical(character(0), termList[[i]])) {
+                                dt = dt %>% left_join(termList[[i]], 
+                                                      by = c("Term" = "Term"))
+                                setTxtProgressBar(pb, i + 1)
+                        }
+                }
+                close(pb)
                 
-                        df = data.frame(Term = tl[i], Freq = tl[i + 1])
-                        # print(i)
-                        # print(head(df))
-                        colnames(df) = c("Term", "Freq")
-                        dt = dt %>% left_join(df, by = c("Term" = "Term"))
-                setTxtProgressBar(pb, i + 1)
+                dt[is.na(dt)] = 0
+                dt = data.frame(Term = dt[, 1], Freq = apply(dt[, -1], 1, sum))
+                dt
         }
-        close(pb)
         
-        dt[is.na(dt)] = 0
-        dt = data.frame(dt[, 1], apply(dt[, -1], 1, sum))
-        colnames(dt) = c("Term", "Freq")
+        dt = reduce(termList)
+        print(head(dt))
         
         totTime = proc.time() - tic
         print(paste("Processing time:", 
                     totTime[3] %>% round(2) %>% seconds_to_period()))
-        
-        # print(head(dt))
         dt
         
 }
@@ -337,8 +295,7 @@ parallelNGramCount <- function(myTokens, N = 2, nPartitions = 4) {
         # Start up a parallel cluster
         cl = makeCluster(4L)
         print("processing Ngrams...")
-        nGrams = pblapply(myTokens, createNgrams, N = N)
-        # print(head(nGrams))
+        nGrams = pblapply(myTokens, createNgrams, N = N, cl = cl)
         stopCluster(cl)
         
         print(paste("Total unique Ngrams:", nGrams %>% unique() %>% length()))
@@ -351,29 +308,22 @@ parallelNGramCount <- function(myTokens, N = 2, nPartitions = 4) {
         print("Mapping...")
         nPartitions = nPartitions
         totalSentences = nGrams %>% length()
-        # print(totalSentences)
-        # print(nPartitions)
         partLength = round(totalSentences / nPartitions)
-        # print(partLength)
         parts = gl(n = nPartitions, k = partLength, length = totalSentences)
-        # print(parts)
         
         wordCount <- function(tokenList) {
                 
                 oldw = getOption("warn")
                 options(warn = -1)
                 
-                # print(tokenList)
                 freqTables = tokenList %>% lapply(table)
                 terms = freqTables %>% unlist() %>% names() %>% unique() %>% sort()
                 
                 df = data.frame(Term = terms)
-                # print(head(df))
                 
                 for (i in 1:length(freqTables)) {
                         
                         if (nrow(data.frame(freqTables[i])) > 0) {
-                                # print(data.frame(freqTables[i]))
                                 df = df %>% left_join(data.frame(freqTables[i]), 
                                                       by = c("Term" = "Var1"))
                         }
@@ -382,52 +332,52 @@ parallelNGramCount <- function(myTokens, N = 2, nPartitions = 4) {
                 df[is.na(df)] = 0
                 
                 if (ncol(df) > 0) {
-                        df = data.frame(df[, 1], apply(df[, -1], 1, sum))
-                        colnames(df) = c("Term", "Freq")
+                        df = data.frame(
+                                Term = df[, 1], 
+                                Freq = apply(df[, -1], 1, sum)
+                                )
                 }
                 
                 options(warn = oldw)
-                # print(head(df))
-                
                 df
         }
         
         print("Shuffling...")
-        cl = makeCluster(4L)
-        tl = pbsapply(1:nPartitions, function(i) {
+        cl = makeCluster(2L)
+        termList = pblapply(1:nPartitions, function(i) {
                 library(dplyr)
                 nGrams[parts == as.character(i)] %>% wordCount()
         }, cl = cl)
         stopCluster(cl)
-        # print(str(tl))
         
         print("Reduction...")
-        dt = data.frame(Term = tl[1])
-        colnames(dt) = "Term"
-        
-        # print(head(dt))
-        # print(length(seq(1, length(tl), 2)))
-        
-        pb = txtProgressBar(min = 0, max = length(seq(1, length(tl), 2)), style = 3)
-        for (i in seq(1, length(tl), 2)) {
-                df = data.frame(Term = tl[i], Freq = tl[i + 1])
-                # print(i)
-                # print(head(df))
-                colnames(df) = c("Term", "Freq")
-                dt = dt %>% left_join(df, by = c("Term" = "Term"))
-                setTxtProgressBar(pb, i + 1)
+        reduce <- function(termList) {
+                dt = data.frame(Term = sapply(1:length(termList), function(i) 
+                        levels(termList[[i]]$Term)) %>% unlist() %>% unique() )
+                colnames(dt) = "Term"
+                
+                pb = txtProgressBar(min = 0, 
+                                    max = length(termList), 
+                                    style = 3)
+                for (i in 1:length(termList)) {
+                        if (!identical(character(0), termList[[i]])) {
+                                dt = dt %>% left_join(termList[[i]], 
+                                                      by = c("Term" = "Term"))
+                                setTxtProgressBar(pb, i + 1)
+                        }
+                }
+                close(pb)
+                
+                dt[is.na(dt)] = 0
+                dt = data.frame(Term = dt[, 1], Freq = apply(dt[, -1], 1, sum))
+                dt
         }
-        close(pb)
         
-        dt[is.na(dt)] = 0
-        dt = data.frame(dt[, 1], apply(dt[, -1], 1, sum))
-        colnames(dt) = c("Term", "Freq")
+        dt = reduce(termList)
         
         totTime = proc.time() - tic
         print(paste("Processing time:", 
                     totTime[3] %>% round(2) %>% seconds_to_period()))
-        
-        # print(head(dt))
         dt
         
 }
@@ -449,13 +399,9 @@ dtm <- function(wordFreq) {
                 arrange(desc(Perc))
 }
 
-myPlotCoverage <- function(dtf, dtf1, dtf2) {
+myPlotCoverage <- function(dtf, dtf1, dtf2, title) {
         
         library(plotly)
-        
-        Sys.setenv("plotly_username" = "landrad78")
-        Sys.setenv("plotly_api_key" = "JUuLrFcCqExiWblQbHup")
-        
         p1 = plot_ly(data = dtf, type = "scatter", mode = "lines", name = "Terms",
                      x = ~seq_along(CumPerc), y = ~CumPerc) %>%
                 layout(xaxis = list(title = "Number of Terms"))
@@ -466,11 +412,7 @@ myPlotCoverage <- function(dtf, dtf1, dtf2) {
                      x = ~seq_along(CumPerc), y = ~CumPerc) %>%
                 layout(xaxis = list(title = "Number of TriGrams"))
         p = subplot(p1, p2, p3, nrows = 1, shareY = T, titleX = T) %>%
-                layout(title = myFiles[i],
+                layout(title = title,
                        yaxis = list(title = "% Coverage"))
-        plotly_IMAGE(p, format = "png", 
-                     out_file = paste0(data.folder, "coverage_terms_", objName, ".png"))
-        api_create(p, paste0(data.folder, "coverage_terms_", objName), 
-                   fileopt = "overwrite", sharing = "public")
         p
 }

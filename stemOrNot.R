@@ -12,7 +12,7 @@ data.folder = "/Users/alejandro/Coursera Data Science Capstone Data/en_US/"
 myFiles = list.files(data.folder, pattern = ".txt")
 myFiles
 
-linesToRead = 50000
+linesToRead = 100000
 
 tic = proc.time()
 
@@ -26,13 +26,13 @@ print("Finished reading file.")
 cl = makeCluster(4L)
 print("Sampling from data file...")
 set.seed(80537)
-partition = rbinom(length(myLines), 1, 0.1)
+partition = rbinom(length(myLines), 1, 0.25)
 myLinesSample = myLines[which(partition == 1)]
 
 # Clean text
 print(paste("Cleaning sampled text in file:", myFiles[i], "..."))
 sentences = myLinesSample %>% tokenize_sentences() %>% unlist()
-myTokensStem = pblapply(sentences, cleanSentence, cl = cl) %>%
+myTokensStem = pblapply(sentences, cleanSentence, cl = cl, stem = T) %>%
         Filter(f = Negate(is.null))
 myTokensNo = pblapply(sentences, cleanSentence, cl = cl, stem = F) %>%
         Filter(f = Negate(is.null))
@@ -54,7 +54,9 @@ p = plot_ly(data = dtfStem, type = "scatter", mode = "lines", name = "Stemmed",
         add_trace(type = "scatter", mode = "lines", name = "Unstemmed",
                   x = ~seq_along(dtfNo$CumPerc), y = ~dtfNo$CumPerc) %>%
         layout(xaxis = list(title = "Number of Terms"))
+p
 print("Finished plotting.")
+saveRDS(p, paste0(data.folder, "coverage.RDS"))
 
 
 # 12. Retrieve total processing time
@@ -62,4 +64,5 @@ totTime = proc.time() - tic
 print(paste("Total processing time:", 
             totTime[3] %>% round %>% seconds_to_period()))
 
-
+head(dtfNo, 20)
+head(dtfStem, 20)

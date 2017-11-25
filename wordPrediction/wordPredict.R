@@ -5,41 +5,48 @@ wordPredict <- function(sentence, biGrams) {
             !is.na(sentence) &&
             nchar(sentence) > 0) {
 
-                sentence = cleanSentence(sentence)
+                sentence = cleanSentenceSilently(sentence)
                 
                 word = sentence %>% strsplit(., " ") %>% unlist()
                 word = word[length(word)]
                 
-                if (word %in% biGrams$V1) {
-                        predWords = filter(biGrams, V1 == word)
-                        prediction = predWords[which.max(predWords$Freq), "V2"] %>%
-                                        as.character()
-                        return(list(prediction, predWords$V2 %>% as.vector()))
+                if (word %in% biGrams$first) {
+                        predWords = biGrams %>%
+                                filter(first == word) %>%
+                                arrange(desc(Freq))
+                        prediction = predWords[1, "second"] %>% as.character()
+                        alternatives = predWords[2:4, "second"] %>% as.vector()
+                        return(list(myWordPrediction = prediction, 
+                                    wordAlternatives = alternatives))
                 } else {
-                        return(list(NULL, sample(biGrams$V2, 1) %>% as.character()))
+                        return(list(myWordPrediction = NULL, 
+                                    wordAlternatives = sample(biGrams$second, 3) %>% as.vector()))
                 }
         }
 }
 
-
 # remove contractions, bad words, and punctuation
-cleanSentence <- function(sentence) {
+cleanSentenceSilently <- function(sentence, language = "en_US", stem = F) {
         library(dplyr)
         library(tokenizers)
         library(qdapDictionaries)
+        library(hunspell)
         
-        # converting sentence into tokens
+        # print("Original sentence:")
+        # print(sentence)
+        
+        # 1 . Convert sentence into tokens
         # print("tokenizing...")
         if (length(sentence) == 0) {
                 warning("no words in sentence! Skipping sentence")
                 # print(sentence)
                 sentence = list(NULL)
         }
-        # print(sentence)
+        
         tokens = sentence %>% 
                 tokenize_words() %>% 
                 unlist()
-        # print(tokens)
+        
         if (length(tokens) == 0) {
                 warning("no tokens in sentence! Skipping sentence")
                 # print(tokens)
@@ -49,9 +56,10 @@ cleanSentence <- function(sentence) {
                 # print(tokens)
                 warning("token vector is null or na!")
         }
+        
+        # 2. Remove numbers and non-ASCII
         # print("removing numbers and non-ASCII characters...")
         tokens = tokens %>%
-                gsub("'", "~", .) %>%
                 iconv("latin1", "ASCII", sub = "") %>%
                 gsub("[0-9]", "", .) %>%
                 .[. != ""]
@@ -62,48 +70,26 @@ cleanSentence <- function(sentence) {
                 warning("token vector is null or na!")
         }
         
-        # Loading dictionaries for token cleaning
-        contracted = contractions[, 1] %>% tokenize_words() %>% 
-                unlist() %>% gsub("'", "~", .)
-        expanded = contractions[, 2] %>% tokenize_words() %>% unlist()
-        abbreviations = rbind(abbreviations,
-                              data.frame(abv = "T.V.",
-                                         rep = "Television"))
-        abbrev = abbreviations[, 1] %>% tokenize_words() %>% unlist()
-        abbExp = abbreviations[, 2] %>% tokenize_words() %>% unlist()
+        # 3. Load dictionaries for token cleaning
         badwords = readRDS("badWordsDict.rds")
         stopwords_regex = paste(stopwords('en'), collapse = '\\b|\\b')
         stopwords_regex = paste0('\\b', stopwords_regex, '\\b')
         
-        # Define functions
+        # 4. Define functions
         expContract <- function(tokens) {
                 # print("Expanding contractions...")
-                sapply(1:length(tokens), function(i) {
-                        condition = tokens[i] %in% contracted
-                        if (condition && 
-                            !is.na(condition) &&
-                            !length(condition) == 0) {
-                                item = (which(contracted %in% tokens[i]) - 1) * 2
-                                expanded[item:(item + 1)]
-                        } else {
-                                tokens[i]
-                        }
-                }) %>% unlist()
-        }
-        
-        expAbbv <- function(tokens) {
-                # print("Expanding abbreviations")
-                sapply(1:length(tokens), function(i) {
-                        condition = tokens[i] %in% abbrev
-                        if (condition && 
-                            !is.na(condition) && 
-                            !length(condition) == 0) {
-                                item = (which(abbrev %in% tokens[i]) - 1) * 2
-                                abbExp[item:(item + 1)]  
-                        } else {
-                                tokens[i]
-                        }
-                })
+                if (!identical(character(0), tokens)) {
+                        tokens = tokens %>% gsub("'ve", " have", .) %>%
+                                gsub("'s", " is", .) %>%
+                                gsub("'m", " am", .) %>%
+                                gsub("'ll", " will", .) %>%
+                                gsub("'d", " would", .) %>%
+                                gsub("n't", " not", .) %>%
+                                gsub("'re", " are", .) %>%
+                                tokenize_words() %>% unlist()
+                }
+                # print(tokens)
+                tokens
         }
         
         cleanWords <- function(tokens) {
@@ -121,31 +107,29 @@ cleanSentence <- function(sentence) {
                 # print("tokens after removing badwords:")
                 tokens = sapply(tokens, function(x) x[!is.na(x)]) %>% unlist()
                 tokens = Filter(function(x) !identical(character(0),x), tokens)
-                badTokens = grepl("obscenity", tokens)
-                tokens = tokens[!badTokens]
+                tokens = tokens %>% gsub("obscenity", NA, .) %>% .[!is.na(.)]
                 # print(tokens)
                 tokens
         }
         
         spellCheck <- function(tokens) {
                 # print("Spell checking...")
-                tokens = gsub("~", "", tokens)
-                # print("tokens read for spellchecking:")
-                # print(tokens)
                 if (!identical(character(0), tokens) && length(tokens) > 0) {
                         tokens = sapply(1:length(tokens), function(i) {
-                                # print(tokens[i])
                                 if (is.na(tokens[i])) {
                                         tokens[i] = ""
                                 }
                                 library(hunspell)
-                                condition = hunspell_check(tokens[i] %>% as.character())
-                                # str(condition)
+                                condition = hunspell_check(tokens[i] %>% 
+                                                                   as.character(),
+                                                           dict = dictionary(language))
                                 if (!condition && 
                                     !is.na(condition) && 
                                     !length(condition) == 0) {
-                                        corrected = hunspell_suggest(tokens[i] %>% 
-                                                                             as.character())[[1]]
+                                        corrected = hunspell_suggest(tokens[i] 
+                                                                     %>% 
+                                                                             as.character(),
+                                                                     dict = dictionary(language))[[1]]
                                         if (length(corrected) > 1) {
                                                 corrected = corrected[2]
                                         }
@@ -163,8 +147,6 @@ cleanSentence <- function(sentence) {
                 }
                 
                 tokens = tokens[!is.na(tokens) && !is.null(tokens)] %>% unlist()
-                # print("tokens after spellchecking:")
-                # print(tokens)
                 if (any(grepl('\\(\\"', tokens))) {
                         warning("not separating characters after spellchecking!")
                 }
@@ -172,7 +154,7 @@ cleanSentence <- function(sentence) {
         }
         
         removeStopWords <- function(tokens) {
-                # print("Removing stop words...")
+                # print("Removing stopwords...")
                 tokens = stringr::str_replace_all(tokens, stopwords_regex, '')
                 # print("tokens after removing stopwords:")
                 tokens = Filter(function(x) !identical(character(0),x), tokens)
@@ -180,24 +162,29 @@ cleanSentence <- function(sentence) {
                         warning("not separating characters after removing stopwords!")
                 }
                 tokens = Filter(function(f) nchar(f) > 0, tokens)
-                # print(tokens)
                 tokens
         } 
         
         stemWords <- function(tokens) {
-                tokens = hunspell_stem(tokens)
+                tokens = hunspell_stem(tokens, dict = dictionary(language))
                 tokens %>% sapply(function(x) x[length(x)])
         }
         
-        # Clean sentence
+        # 5. Perform Clean sentences
         tokens = tokens %>% 
-                expContract() %>% 
-                expAbbv() %>%
+                expContract() %>%
                 cleanWords() %>%
                 spellCheck() %>%
-                removeStopWords() %>%
-                stemWords() %>%
+                # removeStopWords() %>%
                 unlist() 
-        tokens[!is.na(tokens)]
+        tokens = tokens[!is.na(tokens)]
         
+        if (stem == T) {
+                tokens = tokens %>% 
+                        stemWords() %>%
+                        unlist() 
+        }
+        
+        # print(tokens)
+        tokens
 }
