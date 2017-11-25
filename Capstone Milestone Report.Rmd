@@ -8,163 +8,112 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 library(dplyr)
-library(lubridate)
-library(tokenizers)
-library(parallel)
-library(pbapply)
-library(plotly)
 library(knitr)
-
+library(kableExtra)
+library(tokenizers)
+library(igraph) %>% suppressWarnings()
 source("myFunctions.R")
 ```
-
 ## Summary
-
-
+This is a first report on my capstone project. The overarching goal is to develop a text-predictive application in Shiny. To create the predictive algorithm, a corpus is analyzed to acquire the empirical distribution of word frequencies.
 
 ## Preprocessing of Corpus
-There were four goals for the preprocessing step: 1) Read all English data, 2) Compute descriptive statistics, 3) Capture a randomly selected representative sample of the corpus, and 4) Create clean tokens for the exploratory analysis. The following code, which uses some user functions specially designed to deal with this particular data set, was used to preprocess the English data corpus.
-```{r}
-# get file names in folder
+There were three goals at this step: 1) Read all English data and compute descriptive statistics; 2) Capture a random sample of the corpus and convert words into clean tokens; and 3) perform an exploratory analysis of the empirical coocurrence of words. 
+
+## Descriptive Statistics
+```{r descriptives, echo=FALSE}
+stats = readRDS("stats.rds")
+stats %>% 
+        kable("html", caption = "Table 1. Corpus descriptive statistics") %>%
+        kable_styling(bootstrap_options = "striped", full_width = F)
+```
+
+## Sampling and Cleaning
+One percent of the dataset was randomly sampled to be used in the following stages of this analysis. Textual data was parsed into sentences using various R libraries, including: *tokenizers, qdapDictionaries, and hunspell*. For each sentence, tokens were extracted, numbers and non-ASCII characters removed, contractions (mustn't, she'll, that's, etc.) expanded, obscene words removed, and misspelled words corrected. For instance, the *clenSentence* function is applied to the fifth sentence in the News dataset.
+
+```{r cleaning}
 data.folder = "/Users/alejandro/Coursera Data Science Capstone Data/en_US/"
 myFiles = list.files(data.folder, pattern = ".txt")
-myFiles
-
-stats = NULL
-
-for (i in 1:length(myFiles)) {
-        
-        tic = proc.time()
-        
-        # 1. Read a chunck of data
-        print(paste("Reading file:", myFiles[i], "..."))
-        con = file(paste0(data.folder, myFiles[i]), "r")
-        myLines = readLines(con)
-        print("Finished reading file.")
-        
-        # 2. Initialize parallel computing
-        cl = makeCluster(4L)
-        
-        # 3. Compute descriptive stats for raw data
-        print(paste("Calculating descriptives in raw file:", myFiles[i], "..."))
-        rawStats = pblapply(myLines, describeLines, cl = cl)
-        stats = rbind(stats, textStats(rawStats) %>% round)
-        stats %>% kable(caption = "Word and character frequency in data file.")
-        
-        # 4. Sample data
-        print("Sampling from data file...")
-        set.seed(80537)
-        partition = rbinom(length(myLines), 1, 0.01)
-        myLinesSample = myLines[which(partition == 1)]
-        
-        # 5. Clean text
-        print(paste("Cleaning sampled text in file:", myFiles[i], "..."))
-        sentences = myLinesSample %>% tokenize_sentences() %>% unlist()
-        myTokens = pblapply(sentences, cleanSentence, cl = cl) %>%
-                Filter(f = Negate(is.null))
-        
-        # close parallel
-        stopCluster(cl)
-        
-        # 12. Retrieve total processing time
-        totTime = proc.time() - tic
-        print(paste("Total processing time:", 
-                    totTime[3] %>% round %>% seconds_to_period()))
-}
+linesToRead = 2
+con = file(paste0(data.folder, myFiles[1]), "r")
+myLines = readLines(con, linesToRead)
+close.connection(con)
+sentences = myLines %>% 
+        tokenize_sentences() %>% 
+        unlist()
+tokens = sentences[1] %>% 
+        cleanSentence
 ```
-
 
 ## Exploratory Analysis
+### Frequencies
+Table 2 shows the most frequent terms, bigrams, and trigrams in the sample
+```{r exploratory, echo=FALSE}
+data.folder = "/Users/alejandro/Dropbox (Personal)/Coursera Data Science/"
+myRObjs = list.files(data.folder, pattern = "Total")
+myRObjs = myRObjs[-grep("lang", myRObjs)]
 
-```{r}
-for (i in 1:length(myFiles)) {
-        
-        tic = proc.time()
-        
-        # 1. Create object names for saving to hard drive
-        print("Saving objects...")
-        objName = strsplit(myFiles[i], split = "\\.")[[1]][2]
-        saveRDS(myTokens, paste0(data.folder, objName, ".rds"))
-        
-        # 2. Compute word frequency
-        print(paste("Calculating word frequency for:", myFiles[i], "..."))
-        wordFreq = parallelWordCount(myTokens, nPartitions = 100)
-        print(paste("Saving objects for:", myFiles[i], "..."))
-        saveRDS(wordFreq, paste0(data.folder, "wordFreq_", objName))
-        
-        # 3. Compute bigrams
-        print(paste("Calculating bigrams for:", myFiles[i], "..."))
-        biGrams = parallelNGramCount(myTokens, N = 2, nPartitions = 100)
-        print(paste("Saving objects for:", myFiles[i], "..."))
-        saveRDS(biGrams, paste0(data.folder, "biGrams_", objName))
-        
-        # 4. Compute trigrams
-        print(paste("Calculating trigrams for:", myFiles[i], "..."))
-        triGrams = parallelNGramCount(myTokens, N = 3, nPartitions = 100)
-        print(paste("Saving objects for:", myFiles[i], "..."))
-        saveRDS(triGrams, paste0(data.folder, "triGrams_", objName))
-        
-        # 5. Detect languages
-        cl = makeCluster(4L)
-        print(paste("Detecting languages for:", myFiles[i], "..."))
-        languages = pbsapply(myTokens, detectLanguage, cl = cl)
-        stopCluster(cl)
-        languages = languages[!is.na(languages)] %>% table %>% data.frame()
-        head(languages)
-        print(paste("Saving objects for:", myFiles[i], "..."))
-        saveRDS(languages, paste0(data.folder, "languages_", objName))
-        
-        # 6. Produce plots
-        print(paste("Creating plots for:", myFiles[i], "..."))
-        dtf = dtm(wordFreq)
-        dtf2 = dtm(biGrams)
-        dtf3 = dtm(triGrams)
-        dtl = dtm(languages)
-        
-        print(paste("saving plot to:", paste0("coverage_terms_", objName, ".png")))
-        myPlotCoverage(dtf, dtf2, dtf3)
-        print("Finished plotting.")
-        
-        print("Table: Distribution of languages in text")
-        dtl
-        
-        # 7. Retrieve total processing time
-        totTime = proc.time() - tic
-        print(paste("Total processing time:", 
-                    totTime[3] %>% round %>% seconds_to_period()))
-}
-```
-
-```{r}
-# 1. Load data
-data.folder = "/Users/alejandro/Coursera Data Science Capstone Data/en_US/"
-myFiles = list.files(data.folder, pattern = "biGram")
-i = 1
-totBiGrams = NULL
-for (i in 1:length(myFiles)) {
-        biGrams = readRDS(paste0(data.folder, myFiles[i]))
-        totBiGrams = rbind(totBiGrams, biGrams)
+myFreqTable = matrix(numeric(6), nrow = 6)
+for (i in c(3, 1, 2)) {
+        freq = readRDS(paste0(data.folder, myRObjs[i])) %>% 
+                arrange(desc(Freq)) %>% 
+                head 
+        myFreqTable = data.frame(myFreqTable, freq)
 }
 
-# 2. Preprocess
-cl = makeCluster(4L)
-edges = pbsapply(biGrams[, 1], function(x) {
-        library(dplyr)
-        strsplit(x %>% as.character(), " ")
-        }, cl = cl) %>% 
+myFreqTable = myFreqTable[, -1]
+colnames(myFreqTable) = paste(myRObjs[c(3, 1, 2)], ";Freq") %>% 
+        strsplit(., ";") %>% 
         unlist()
+myFreqTable %>% 
+        kable("html", caption = "Table 2. Frequency of terms in sample") %>%
+        kable_styling(bootstrap_options = c("striped", "condensed"), full_width = F)
 
-biGrams = data.frame(matrix(edges, ncol = 2, byrow = T) %>% as.data.frame(), 
-                 biGrams[, 2])
-colnames(biGrams)[3] = "Freq"
-write.csv(biGrams, "wordPrediction/bigrams.csv", row.names = F)
-head(biGrams)
+```
+### Coverage
+Figure 1 shows the coverage the number of terms, bigrams, and trigrams achieve in the sample
+![Figure 1. Coverage of terms](../coverage_terms.png)
 
-# 3. Create exploratory network graph
-g = graph(edges[1:200])
+### Languages  
+Figure 2 shows the distribution of other languages besides English encountered in the sample. 
+![Figure 2. Languages in sample](../languages.png)
+  
+Table 3 shows the ten most prevalent languages in the sample.
+```{r lang, echo=FALSE}
+myRObjs = list.files(data.folder, pattern = "Total")
+myRObjs = myRObjs[grep("lang", myRObjs)]
+readRDS(paste0(data.folder, myRObjs)) %>% 
+        arrange(desc(Freq)) %>% 
+        dtm() %>% 
+        head(10) %>%
+        kable("html", caption = "Table 3. Frequency of languages", digits = 2) %>%
+        kable_styling(bootstrap_options = c("striped", "condensed"), full_width = F)
+```
+### Empirical frequencies  
+Figure 3 shows the empirical coocurrence of bigrams in the sample.
+```{r igraph, echo=FALSE, fig.width=10, fig.cap="Figure 3. Word networks from sampled bigrams.", fig.align='center'}
+links = readRDS(paste0(data.folder, "empiricalFrequencies.Rdata"))
+par(mfrow = c(1, 2), mar = c(2, 2, 1, 1))
+g = graph(links[101:150])
+plot(g, vertex.frame.color = NA, vertex.color = NA, 
+     edge.arrow.size = 0.5, edge.arrow.width = 0.5)
+g = graph(links[201:250])
 plot(g, vertex.frame.color = NA, vertex.color = NA, 
      edge.arrow.size = 0.5, edge.arrow.width = 0.5)
 ```
 
 ## Predictive Algorithm: First stab
+A first attempt at creating a prediction algorithm is shown in the function *wordPredict*. This algorithm takes a sentence as an input, extracts the last word, cleans it, and then uses the empirical bigrams as a Markov transition probability to predict the most likely next word the user is about to type. The *wordPredict* function returns a list of the most probable word (according to the bigrams data base) and the three most probable alternatives. In case the last word in sentence is not in the data base, the algorithm randomly samples the data base to offer some possible alternatives.
+```{r predict}
+biGrams = read.csv(paste0(data.folder, "wordPrediction-bigrams.csv"))
+source("wordPrediction/wordPredict.R")
 
+sentence = "I am on a"
+wordPredict(sentence, biGrams)
+
+sentence = "My father wasn't in the house"
+wordPredict(sentence, biGrams)
+
+sentence = "I like my biplane"
+wordPredict(sentence, biGrams)
+```
