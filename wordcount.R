@@ -46,6 +46,12 @@ for (i in 1:length(myRDS)) {
         print(paste("Saving objects for:", myRDS[i], "..."))
         saveRDS(triGrams, paste0(data.folder, "triGrams_", myRDS[i]))
         
+        # 4. Compute tetraGrams
+        print(paste("Calculating tetraGrams for:", myRDS[i], "..."))
+        tetraGrams = parallelNGramCount(sentences, N = 4, nPartitions = nPartitions)
+        print(paste("Saving objects for:", myRDS[i], "..."))
+        saveRDS(tetraGrams, paste0(data.folder, "tetraGrams_", myRDS[i]))
+        
         # 5. Detect languages
         cl = makeCluster(4L)
         print(paste("Detecting languages for:", myRDS[i], "..."))

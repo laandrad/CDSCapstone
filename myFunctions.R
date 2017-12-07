@@ -1,3 +1,18 @@
+reformat <- function(line, N = 2) {
+        library(dplyr)
+        
+        line = line %>% gsub("\\t", " ", .) %>% strsplit(" ") %>% unlist()
+        nGram = line[1] %>% strsplit("-") %>% unlist() %>% matrix(ncol = N)
+        data.frame(nGram, Freq = line[2])
+}
+
+makeDF <- function(myLines, N = 2) {
+        cl = makeCluster(2L)
+        df = myLines %>% pblapply(reformat, N, cl = cl) %>% 
+                pbsapply(unlist, cl = cl) %>% t() %>% as.data.frame()
+        stopCluster(cl)
+        df
+}
 
 # remove contractions, bad words, and punctuation
 cleanSentence <- function(sentence, language = "en_US", stem = F) {
