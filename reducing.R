@@ -49,12 +49,14 @@ reduce <- function(objects, subset) {
 wordFreq = reduce(myRDS, "Freq")
 biGrams = reduce(myRDS, "biGrams")
 triGrams = reduce(myRDS, "triGrams")
+tetraGrams = reduce(myRDS, "tetraGrams")
 languages = reduce(myRDS, "language")
 
 print(paste("Saving objects..."))
 saveRDS(wordFreq, paste0(data.folder, "wordFreqTotal.Rdata"))
 saveRDS(biGrams, paste0(data.folder, "biGramsTotal.Rdata"))
 saveRDS(triGrams, paste0(data.folder, "triGramsTotal.Rdata"))
+saveRDS(tetraGrams, paste0(data.folder, "tetraGramsTotal.Rdata"))
 saveRDS(languages, paste0(data.folder, "languagesTotal.Rdata"))
 
 # 11. Produce plots

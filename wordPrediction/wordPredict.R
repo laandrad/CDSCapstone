@@ -1,14 +1,141 @@
 # word Prediction
-wordPredict <- function(sentence, biGrams) {
+predictWord <- function(sentence, biGrams, triGrams, tetraGrams) {
+        
+        library(tokenizers)
+        
+        if (!is.null(sentence)) {
+                sentence = cleanSentenceSilently(sentence)
+                sentence = sentence %>% tokenize_words() %>% unlist() %>% unname()
+        }
+        
+        # print(sentence)
+        
+        if (!is.null(sentence) & length(sentence) > 2) {
+                wordPred = predictFromTetragram(sentence, tetraGrams)
+                print(paste("tetragram prediction:", wordPred))
+                word = wordPred[[1]]
+                # print(word)
+                alternatives = wordPred[[2]]
+                
+                # if (is.na(word)) warning("word is NA in tetragram")
+                
+                if (is.null(word) || is.na(word)) {
+                        wordPred = predictFromTrigram(sentence, triGrams)
+                        print(paste("triagram prediction:", wordPred))
+                        word = wordPred[[1]]
+                        alternatives = wordPred[[2]]
+                        
+                        # if (is.na(word)) warning("word is NA in Trigram")
+                        
+                        if (is.null(word) || is.na(word)) {
+                                wordPred = predictFromBigram(sentence, biGrams)
+                                print(paste("biagram prediction:", wordPred))
+                                word = wordPred[[1]]
+                                alternatives = wordPred[[2]]
+                        }
+                }
+                
+        } else if (!is.null(sentence) & 
+                   length(sentence) == 2) {
+                
+                wordPred = predictFromTrigram(sentence, triGrams)
+                word = wordPred[[1]]
+                alternatives = wordPred[[2]]
+                
+                if (is.null(word) || 
+                    identical(logical(0), word) ||
+                    is.na(word)) {
+                        wordPred = predictFromBigram(sentence, biGrams)
+                        word = wordPred[[1]]
+                        alternatives = wordPred[[2]]
+                }
+                        
+        } else if (!is.null(sentence) & 
+                   length(sentence) == 1) {
+                
+                wordPred = predictFromBigram(sentence, biGrams)
+                word = wordPred[[1]]
+                alternatives = wordPred[[2]]
+                
+        } else {
+                list(word = NULL, alternatives = c("a", "the", "is"))
+        }
+        
+        if (any(is.na(alternatives))) {
+                alternatives = predictFromTrigram(sentence, triGrams)[[2]]
+                
+                if (any(is.na(alternatives))) {
+                        alternatives = predictFromBigram(sentence, biGrams)[[2]]
+                }
+        }
+        
+        list(word, alternatives)
+}
+
+predictFromTetragram <- function(sentence, tetraGrams) {
         
         if (!is.null(sentence) &&
-            !is.na(sentence) &&
-            nchar(sentence) > 0) {
-
-                sentence = cleanSentenceSilently(sentence)
+            !is.na(sentence)) {
                 
-                word = sentence %>% strsplit(., " ") %>% unlist()
-                word = word[length(word)]
+                triGramFirst = sentence[length(sentence) - 2]
+                triGramSecond = sentence[length(sentence) - 1]
+                triGramThird = sentence[length(sentence)]
+                
+                if (triGramFirst %in% tetraGrams$first & 
+                    triGramSecond %in% tetraGrams$second &
+                    triGramThird %in% tetraGrams$third) {
+                                        predWords = tetraGrams %>%
+                                                filter(first == triGramFirst &
+                                                               second == triGramSecond &
+                                                               third == triGramThird) %>%
+                                                arrange(desc(Freq))
+                                        prediction = predWords[1, "fourth"] %>% as.character()
+                                        alternatives = predWords[2:4, "fourth"] %>% as.vector()
+                                        return(list(myWordPrediction = prediction, 
+                                                    wordAlternatives = alternatives))
+                        
+                } else {
+                        return(list(myWordPrediction = NULL, 
+                                    wordAlternatives = sample(tetraGrams$fourth, 3) %>% 
+                                            as.vector()))
+                }
+        }
+}
+
+predictFromTrigram <- function(sentence, triGrams) {
+        
+        if (!is.null(sentence) &&
+            !is.na(sentence)) {
+                
+                bigramFirst = sentence[length(sentence) - 1]
+                # print(bigramFirst)
+                bigramSecond = sentence[length(sentence)]
+                # print(bigramSecond)
+                
+                if (bigramFirst %in% triGrams$first & 
+                    bigramSecond %in% triGrams$second) {
+                                predWords = triGrams %>%
+                                        filter(first == bigramFirst &
+                                                       second == bigramSecond) %>%
+                                        arrange(desc(Freq))
+                                prediction = predWords[1, "third"] %>% as.character()
+                                alternatives = predWords[2:4, "third"] %>% as.vector()
+                                return(list(myWordPrediction = prediction, 
+                                            wordAlternatives = alternatives))
+                } else {
+                        return(list(myWordPrediction = NULL, 
+                                    wordAlternatives = sample(triGrams$third, 3) %>% 
+                                            as.vector()))
+                }
+        }
+}
+
+predictFromBigram <- function(sentence, biGrams) {
+        
+        if (!is.null(sentence) &&
+            !is.na(sentence)) {
+
+                word = sentence[length(sentence)]
                 
                 if (word %in% biGrams$first) {
                         predWords = biGrams %>%
@@ -20,7 +147,8 @@ wordPredict <- function(sentence, biGrams) {
                                     wordAlternatives = alternatives))
                 } else {
                         return(list(myWordPrediction = NULL, 
-                                    wordAlternatives = sample(biGrams$second, 3) %>% as.vector()))
+                                    wordAlternatives = sample(biGrams$second, 3) %>% 
+                                            as.vector()))
                 }
         }
 }
@@ -43,9 +171,7 @@ cleanSentenceSilently <- function(sentence, language = "en_US", stem = F) {
                 sentence = list(NULL)
         }
         
-        tokens = sentence %>% 
-                tokenize_words() %>% 
-                unlist()
+        tokens = sentence %>% tokenize_words() %>% unlist()
         
         if (length(tokens) == 0) {
                 warning("no tokens in sentence! Skipping sentence")

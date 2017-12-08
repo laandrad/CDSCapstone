@@ -31,19 +31,19 @@ for (i in 1:length(myFiles)) {
         print("Finished reading file.")
         
         # 2. Initialize parallel computing
-        cl = makeCluster(4L)
+        cl = makeCluster(2L)
         
-        # 3. Compute descriptive stats for raw data
-        print(paste("Calculating descriptives in raw file:", myFiles[i], "..."))
-        rawStats = pblapply(myLines, describeLines, cl = cl)
-        stats = rbind(stats, textStats(rawStats) %>% round)
-        print("Table: Word and character frequency in data file.")
-        print(stats)
+        # # 3. Compute descriptive stats for raw data
+        # print(paste("Calculating descriptives in raw file:", myFiles[i], "..."))
+        # rawStats = pblapply(myLines, describeLines, cl = cl)
+        # stats = rbind(stats, textStats(rawStats) %>% round)
+        # print("Table: Word and character frequency in data file.")
+        # print(stats)
         
         # 4. Sample data
         print("Sampling from data file...")
         set.seed(80537)
-        partition = rbinom(length(myLines), 1, 0.1)
+        partition = rbinom(length(myLines), 1, 0.5)
         myLinesSample = myLines[which(partition == 1)]
         
         # 5. Clean text
@@ -56,8 +56,8 @@ for (i in 1:length(myFiles)) {
         print("Saving objects...")
         objName = strsplit(myFiles[i], split = "\\.")[[1]][2]
         data.folder2 = "/Users/alejandro/Dropbox (Personal)/Coursera Data Science/"
-        write.table(myLinesSample, paste0(data.folder2, objName, "_lines.txt"))
-        saveRDS(myTokens, paste0(data.folder2, objName, "_tokens.Rdata"))
+        # write.table(myLinesSample, paste0(data.folder2, objName, "_lines.txt"))
+        saveRDS(myTokens, paste0(data.folder2, objName, "_ALL_tokens.Rdata"))
         
         # 7. close parallel
         stopCluster(cl)
