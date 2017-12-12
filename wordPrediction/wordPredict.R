@@ -1,190 +1,127 @@
-# word Prediction
-predictWord <- function(sentence, biGrams, triGrams, tetraGrams) {
-        
-        library(tokenizers)
-        
-        if (!is.null(sentence)) {
-                sentence = cleanSentenceSilently(sentence)
-                sentence = sentence %>% tokenize_words() %>% unlist() %>% unname()
-        }
-        
-        # print(sentence)
-        
-        if (!is.null(sentence) & length(sentence) > 2) {
-                wordPred = predictFromTetragram(sentence, tetraGrams)
-                print(paste("tetragram prediction:", wordPred))
-                word = wordPred[[1]]
-                # print(word)
-                alternatives = wordPred[[2]]
+# prediction from bigams algorithm
+predW2G <- function(sentence, db) {
+               
+        fdb = db %>% filter(first %in% sentence[length(sentence)])
                 
-                # if (is.na(word)) warning("word is NA in tetragram")
-                
-                if (is.null(word) || is.na(word)) {
-                        wordPred = predictFromTrigram(sentence, triGrams)
-                        print(paste("triagram prediction:", wordPred))
-                        word = wordPred[[1]]
-                        alternatives = wordPred[[2]]
+        if (fdb %>% nrow() > 0) {
+                print("got first")
                         
-                        # if (is.na(word)) warning("word is NA in Trigram")
-                        
-                        if (is.null(word) || is.na(word)) {
-                                wordPred = predictFromBigram(sentence, biGrams)
-                                print(paste("biagram prediction:", wordPred))
-                                word = wordPred[[1]]
-                                alternatives = wordPred[[2]]
-                        }
-                }
-                
-        } else if (!is.null(sentence) & 
-                   length(sentence) == 2) {
-                
-                wordPred = predictFromTrigram(sentence, triGrams)
-                word = wordPred[[1]]
-                alternatives = wordPred[[2]]
-                
-                if (is.null(word) || 
-                    identical(logical(0), word) ||
-                    is.na(word)) {
-                        wordPred = predictFromBigram(sentence, biGrams)
-                        word = wordPred[[1]]
-                        alternatives = wordPred[[2]]
-                }
-                        
-        } else if (!is.null(sentence) & 
-                   length(sentence) == 1) {
-                
-                wordPred = predictFromBigram(sentence, biGrams)
-                word = wordPred[[1]]
-                alternatives = wordPred[[2]]
+                fdb %>% getPredictions(i = 2)
                 
         } else {
-                list(word = NULL, alternatives = c("a", "the", "is"))
+                print("not in database")
         }
-        
-        if (any(is.na(alternatives))) {
-                alternatives = predictFromTrigram(sentence, triGrams)[[2]]
-                
-                if (any(is.na(alternatives))) {
-                        alternatives = predictFromBigram(sentence, biGrams)[[2]]
-                }
-        }
-        
-        list(word, alternatives)
 }
 
-predictFromTetragram <- function(sentence, tetraGrams) {
+# prediction from trigams algorithm
+predW3G <- function(sentence, db) {
+       
+        sdb = db %>% filter(second %in% sentence[length(sentence)])
+        if (sdb %>% nrow() > 0) {
+                print("got second")
+                        
+                fdb = sdb %>% filter(first %in% sentence[length(sentence) - 1])
+                        
+                if (fdb %>% nrow() > 0) {
+                        print("got first")
+                                
+                        fdb %>% getPredictions(i = 3)
+                                
+                } else {
+                        sdb %>% getPredictions(i = 3)
+                }
+                
+        } else {
+                print("not in database")
+        }
+}
+
+# prediction from tetragams algorithm
+predW4G <- function(sentence, db) {
+
+        tdb = db %>% filter(third %in% sentence[length(sentence)])
         
-        if (!is.null(sentence) &&
-            !is.na(sentence)) {
+        if (tdb %>% nrow() > 0) {
+                # print("got third")
                 
-                triGramFirst = sentence[length(sentence) - 2]
-                triGramSecond = sentence[length(sentence) - 1]
-                triGramThird = sentence[length(sentence)]
-                
-                if (triGramFirst %in% tetraGrams$first & 
-                    triGramSecond %in% tetraGrams$second &
-                    triGramThird %in% tetraGrams$third) {
-                                        predWords = tetraGrams %>%
-                                                filter(first == triGramFirst &
-                                                               second == triGramSecond &
-                                                               third == triGramThird) %>%
-                                                arrange(desc(Freq))
-                                        prediction = predWords[1, "fourth"] %>% as.character()
-                                        alternatives = predWords[2:4, "fourth"] %>% as.vector()
-                                        return(list(myWordPrediction = prediction, 
-                                                    wordAlternatives = alternatives))
+                sdb = tdb %>% filter(second %in% sentence[length(sentence)-1])
+                if (sdb %>% nrow() > 0) {
+                        # print("got second")
+                        
+                        fdb = sdb %>% filter(first %in% sentence[length(sentence) - 2])
+                        
+                        if (fdb %>% nrow() > 0) {
+                                # print("got first")
+                                
+                                fdb %>% getPredictions(i = 4)
+                                
+                        } else {
+                                sdb %>% getPredictions(i = 4)
+                        }
                         
                 } else {
-                        return(list(myWordPrediction = NULL, 
-                                    wordAlternatives = sample(tetraGrams$fourth, 3) %>% 
-                                            as.vector()))
+                        tdb %>% getPredictions(i = 4)
                 }
+                
+        } else {
+                # print("not in database")
         }
 }
 
-predictFromTrigram <- function(sentence, triGrams) {
-        
-        if (!is.null(sentence) &&
-            !is.na(sentence)) {
-                
-                bigramFirst = sentence[length(sentence) - 1]
-                # print(bigramFirst)
-                bigramSecond = sentence[length(sentence)]
-                # print(bigramSecond)
-                
-                if (bigramFirst %in% triGrams$first & 
-                    bigramSecond %in% triGrams$second) {
-                                predWords = triGrams %>%
-                                        filter(first == bigramFirst &
-                                                       second == bigramSecond) %>%
-                                        arrange(desc(Freq))
-                                prediction = predWords[1, "third"] %>% as.character()
-                                alternatives = predWords[2:4, "third"] %>% as.vector()
-                                return(list(myWordPrediction = prediction, 
-                                            wordAlternatives = alternatives))
-                } else {
-                        return(list(myWordPrediction = NULL, 
-                                    wordAlternatives = sample(triGrams$third, 3) %>% 
-                                            as.vector()))
-                }
-        }
+# help function
+getPredictions <- function(db, i) {
+        word = db %>% arrange(desc(freq))
+        list(pred = word[1, i],
+             alt = word[2:6, i],
+             all = word[, i],
+             freq = word[, 5]
+             )
 }
 
-predictFromBigram <- function(sentence, biGrams) {
+# accuracy function
+crossCheckPrediction <- function(myPred, trueW) {
         
-        if (!is.null(sentence) &&
-            !is.na(sentence)) {
-
-                word = sentence[length(sentence)]
-                
-                if (word %in% biGrams$first) {
-                        predWords = biGrams %>%
-                                filter(first == word) %>%
-                                arrange(desc(Freq))
-                        prediction = predWords[1, "second"] %>% as.character()
-                        alternatives = predWords[2:4, "second"] %>% as.vector()
-                        return(list(myWordPrediction = prediction, 
-                                    wordAlternatives = alternatives))
-                } else {
-                        return(list(myWordPrediction = NULL, 
-                                    wordAlternatives = sample(biGrams$second, 3) %>% 
-                                            as.vector()))
-                }
+        if (length(myPred) == 3) {
+                list(first = myPred[[1]] == trueW,
+                     alt = trueW %in% myPred[[2]],
+                     all = trueW %in% myPred[[3]])
+        } else if (length(myPred) == 2) {
+                list(first = myPred[[1]] == trueW,
+                     alt = trueW %in% myPred[[2]],
+                     all = FALSE)
+        } else {
+                list(first = myPred[[1]] == trueW,
+                     alt = FALSE,
+                     all = FALSE)
         }
+        
 }
 
 # remove contractions, bad words, and punctuation
-cleanSentenceSilently <- function(sentence, language = "en_US", stem = F) {
+cleanSentence <- function(sentence, language = "en_US", stem = F) {
         library(dplyr)
         library(tokenizers)
         library(qdapDictionaries)
-        library(hunspell)
-        
-        # print("Original sentence:")
-        # print(sentence)
-        
+
         # 1 . Convert sentence into tokens
-        # print("tokenizing...")
         if (length(sentence) == 0) {
                 warning("no words in sentence! Skipping sentence")
-                # print(sentence)
                 sentence = list(NULL)
         }
         
-        tokens = sentence %>% tokenize_words() %>% unlist()
+        tokens = sentence %>% 
+                tokenize_words() %>% 
+                unlist()
         
         if (length(tokens) == 0) {
                 warning("no tokens in sentence! Skipping sentence")
-                # print(tokens)
                 tokens = list(NULL)
         }
         if (any(is.null(tokens)) | any(is.na(tokens)) | length(tokens) == 0) {
-                # print(tokens)
                 warning("token vector is null or na!")
         }
         
         # 2. Remove numbers and non-ASCII
-        # print("removing numbers and non-ASCII characters...")
         tokens = tokens %>%
                 iconv("latin1", "ASCII", sub = "") %>%
                 gsub("[0-9]", "", .) %>%
@@ -203,7 +140,6 @@ cleanSentenceSilently <- function(sentence, language = "en_US", stem = F) {
         
         # 4. Define functions
         expContract <- function(tokens) {
-                # print("Expanding contractions...")
                 if (!identical(character(0), tokens)) {
                         tokens = tokens %>% gsub("'ve", " have", .) %>%
                                 gsub("'s", " is", .) %>%
@@ -214,12 +150,10 @@ cleanSentenceSilently <- function(sentence, language = "en_US", stem = F) {
                                 gsub("'re", " are", .) %>%
                                 tokenize_words() %>% unlist()
                 }
-                # print(tokens)
                 tokens
         }
         
         cleanWords <- function(tokens) {
-                # print("Cleaning bad words...")
                 tokens = sapply(1:length(tokens), function(i) {
                         condition = tokens[i] %in% badwords
                         if (condition && 
@@ -230,22 +164,19 @@ cleanSentenceSilently <- function(sentence, language = "en_US", stem = F) {
                                 tokens[i]
                         }
                 })
-                # print("tokens after removing badwords:")
                 tokens = sapply(tokens, function(x) x[!is.na(x)]) %>% unlist()
                 tokens = Filter(function(x) !identical(character(0),x), tokens)
                 tokens = tokens %>% gsub("obscenity", NA, .) %>% .[!is.na(.)]
-                # print(tokens)
-                tokens
+                tokens %>% unname()
         }
         
         spellCheck <- function(tokens) {
-                # print("Spell checking...")
                 if (!identical(character(0), tokens) && length(tokens) > 0) {
                         tokens = sapply(1:length(tokens), function(i) {
                                 if (is.na(tokens[i])) {
                                         tokens[i] = ""
                                 }
-                                library(hunspell)
+                                library(hunspell) %>% suppressWarnings()
                                 condition = hunspell_check(tokens[i] %>% 
                                                                    as.character(),
                                                            dict = dictionary(language))
@@ -279,18 +210,6 @@ cleanSentenceSilently <- function(sentence, language = "en_US", stem = F) {
                 tokens
         }
         
-        removeStopWords <- function(tokens) {
-                # print("Removing stopwords...")
-                tokens = stringr::str_replace_all(tokens, stopwords_regex, '')
-                # print("tokens after removing stopwords:")
-                tokens = Filter(function(x) !identical(character(0),x), tokens)
-                if (any(grepl('\\(\\"', tokens))) {
-                        warning("not separating characters after removing stopwords!")
-                }
-                tokens = Filter(function(f) nchar(f) > 0, tokens)
-                tokens
-        } 
-        
         stemWords <- function(tokens) {
                 tokens = hunspell_stem(tokens, dict = dictionary(language))
                 tokens %>% sapply(function(x) x[length(x)])
@@ -301,7 +220,6 @@ cleanSentenceSilently <- function(sentence, language = "en_US", stem = F) {
                 expContract() %>%
                 cleanWords() %>%
                 spellCheck() %>%
-                # removeStopWords() %>%
                 unlist() 
         tokens = tokens[!is.na(tokens)]
         
@@ -310,7 +228,7 @@ cleanSentenceSilently <- function(sentence, language = "en_US", stem = F) {
                         stemWords() %>%
                         unlist() 
         }
-        
-        # print(tokens)
+
         tokens
 }
+

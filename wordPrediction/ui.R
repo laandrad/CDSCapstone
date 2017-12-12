@@ -1,4 +1,5 @@
 library(shiny)
+library(plotly)
 
 # Define UI for application that draws a histogram
 shinyUI(fluidPage(
@@ -9,17 +10,21 @@ shinyUI(fluidPage(
   # Sidebar with a slider input for number of bins 
   sidebarLayout(
     sidebarPanel(
-            textInput("sentence", "Type a sentence...")
+            p("To get started, press button below. Be patient, it might take a while for the data to load."),
+            actionButton("load", "Load database"),
+            p(),
+            p(),
+            p("When database is loaded, start typing a sentence below."),
+            textInput("sentence", "My sentence...")
     ),
     
     # Show a plot of the generated distribution
     mainPanel(
-            p(strong("My prediction of your next word is...")),
+            p(strong("Your sentence with my word prediction is...")),
             textOutput("predWord"),
-            p(),
-            p(),
-            p(em("Alternative suggestions...")),
-            textOutput("altWords")
+            p(""),
+            p(em("Alternative word suggestions...")),
+            plotlyOutput("freqPlot")
     )
   )
 ))

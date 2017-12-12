@@ -91,3 +91,67 @@ cleanSentence <- function(sentence) {
         
 }
 
+generateSentence <- function(myLines) {
+        library(dplyr)
+        library(tokenizers)
+        
+        j = runif(n = 1, min = 2, max = length(myLines)) %>% round
+        text = myLines[j] %>% tokenize_sentences() %>% unlist()
+        text =  text[[length(text)]] %>% tokenize_words() %>% unlist()
+        
+        if (!any(is.na(text)) &
+            length(text) > 1) {
+                k = runif(n = 1, min = 2, max = length(text)) %>% round
+                sentence = text[1:(k - 1)] %>% paste(collapse = " ")
+                word = text[k]
+                # print(paste(sentence, "->", word))
+                list(sentence, word)
+        } else {
+                list(sentence = NULL, word = NULL)
+        }
+}
+
+# Generic function to assign multiple variables from list at the same time
+
+# Generic form
+'%=%' = function(l, r, ...) UseMethod('%=%')
+
+# Binary Operator
+'%=%.lbunch' = function(l, r, ...) {
+        Envir = as.environment(-1)
+        
+        if (length(r) > length(l))
+                warning("RHS has more args than LHS. Only first", length(l), "used.")
+        
+        if (length(l) > length(r))  {
+                warning("LHS has more args than RHS. RHS will be repeated.")
+                r <- extendToMatch(r, l)
+        }
+        
+        for (II in 1:length(l)) {
+                do.call('<-', list(l[[II]], r[[II]]), envir=Envir)
+        }
+}
+
+# Used if LHS is larger than RHS
+extendToMatch <- function(source, destin) {
+        s <- length(source)
+        d <- length(destin)
+        
+        # Assume that destin is a length when it is a single number and source is not
+        if(d==1 && s>1 && !is.null(as.numeric(destin)))
+                d <- destin
+        
+        dif <- d - s
+        if (dif > 0) {
+                source <- rep(source, ceiling(d/s))[1:d]
+        }
+        return (source)
+}
+
+# Grouping the left hand side
+g = function(...) {
+        List = as.list(substitute(list(...)))[-1L]
+        class(List) = 'lbunch'
+        return(List)
+}
