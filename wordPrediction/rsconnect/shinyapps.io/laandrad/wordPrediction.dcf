@@ -5,8 +5,8 @@ account: laandrad
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 235958
-bundleId: 1135492
+bundleId: 1137410
 url: https://laandrad.shinyapps.io/wordPrediction/
-when: 1513284504.49503
+when: 1513367239.11269
 asMultiple: FALSE
 asStatic: FALSE

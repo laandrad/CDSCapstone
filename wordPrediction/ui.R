@@ -12,9 +12,11 @@ shinyUI(fluidPage(
     sidebarPanel(
             p("To get started, press button below. Be patient, it might take a little while for the data to load."),
             actionButton("load", "Load database"),
-            p(),
-            p(),
-            p("When database is loaded, start typing a sentence below. My prediction will be on the right-hand-side panel."),
+            p(""),
+            textOutput("dbLoaded"),
+            p(""),
+            p(""),
+            p("When database is loaded, start typing a sentence below."),
             textInput("sentence", "My sentence...")
     ),
     

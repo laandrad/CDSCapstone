@@ -29,6 +29,15 @@ shinyServer(function(input, output) {
                         }
                 })
         })
+        
+        output$dbLoaded = renderText({
+                        if (!is.null(db4$data)) {
+                                dbl = "Database loaded successfully."
+                        } else {
+                                dbl = "Database not found."
+                        }
+                        dbl
+        })
 
         # load Word prediction function
         source("./wordPredict.R", local = TRUE)
@@ -79,14 +88,14 @@ shinyServer(function(input, output) {
                                         showarrow = F) %>%
                         add_annotations(y = ~perc - 0.05, 
                                         x = ~terms,
-                                        text = ~perc, 
+                                        text = ~freq, 
                                         showarrow = F) %>%
                         layout(xaxis = list(title = "", 
                                             zeroline = FALSE,
                                             showline = FALSE,
                                             showticklabels = FALSE,
                                             showgrid = FALSE), 
-                               yaxis = list(title = "confidence", 
+                               yaxis = list(title = "Word Prevalence in Database", 
                                             zeroline = FALSE,
                                             showline = FALSE,
                                             showticklabels = FALSE,
