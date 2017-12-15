@@ -5,9 +5,8 @@ account: laandrad
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 235958
-bundleId: 1129150
+bundleId: 1137410
 url: https://laandrad.shinyapps.io/wordPrediction/
-when: 1513044170.63765
+when: 1513367239.11269
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: bigrams.csv
